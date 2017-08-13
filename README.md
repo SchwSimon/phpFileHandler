@@ -2,6 +2,16 @@
 
 All in one PHP file handling class
 
+## File sanity
+
+Image files are NOT checked with the use of exif_imagetype!
+The following (common) media files are checked with their first bytes notation:
+ - jpg (jpeg)
+ - gif
+ - png
+ - mp4
+ - webm
+
 ## How to use
 
 ```php
@@ -30,6 +40,22 @@ $phpFileHandler->setAllowedFileTypes( false );
 // adds all files which were uploaded via html form or ajax to phpFileHandler
 $phpFileHandler->add_uploaded_files();
 
+// adds a file from a given web url to phpFileHandler
+$phpFileHandler->add_file_from_url( 'https://flushmodules.com/data/users/1/5wi77gugko3q.png' );
+
+// add already existings files on the server to phpFileHandler
+$phpFileHandler->add_existing_files( 'C:/Apache24/htdocs/domain/data/my_file.txt' );
+
+// File key infos
+// array(
+//  "path" => *current file location*,        (string)
+//  "name" => *original filename*,            (string)
+//  "isnew" => *new file?*,                   (boolean)
+//  "size" => *filesize*,                     (integer)
+//  "error" => *invalid file error message*,  (string)
+//  "isvalid" => *is a valid file*,           (boolean)
+//  "ext" => *file extension*                 (string)
+// );
 $phpFileHandler->Files_valid          // The valid files array
 $phpFileHandler->Files_valid_count    // Valid files count
 $phpFileHandler->Files_invalid        // The invalid files
