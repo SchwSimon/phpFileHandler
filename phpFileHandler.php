@@ -1,5 +1,5 @@
 <?php
-	
+		
 /***
  * phpFileHandler - All in one PHP file handling class
  */
@@ -447,3 +447,4 @@ class phpFileHandler {
 	}	
 
 }
+
