@@ -2,6 +2,8 @@
 
 All in one PHP file handling class
 
+(Started 13.08.2017, not yet finished with the starting build)
+
 ## File sanity
 
 Image files are NOT checked with the use of exif_imagetype!
