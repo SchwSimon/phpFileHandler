@@ -2,7 +2,7 @@
 
 All in one PHP file handling class
 
-(Started 13.08.2017, not yet finished with the starting build)
+(Started 13.08.2017, not yet finished with the initial build)
 
 ## File sanity
 
