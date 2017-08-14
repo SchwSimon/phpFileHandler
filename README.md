@@ -22,7 +22,7 @@ require 'phpFileHandler.php';
 
 $phpFileHandler = new phpFileHandler;
 $phpFileHandler->add_uploaded_files();
-$phpFileHandler->save( '\Path\To\Save\' );
+$phpFileHandler->save( '/Path/To/Save/' );
 
 ```
 
@@ -80,10 +80,10 @@ $phpFileHandler->setUniqFilenames( true, 20 );  // filenames will now be 20 char
 $phpFileHandler->setUniqFilenames( false ); // or do not generate unique filenames, now the filenames will keep their original names
 
 // 
-$phpFileHandler->save( 'C:\The\Save\Path\' ); // save all valid files (phpFileHandler->Files_valid) to the given location
-$phpFileHandler->save( 'C:\The\Save\Path\New\', true ); // allow phpFileHandler to create non existing paths (recursive)
-$phpFileHandler->save( 'C:\The\Save\Path\New\', true, 0 ); // save only the file on index '0' to from phpFileHandler->Files_valid
-$phpFileHandler->save( 'C:\The\Save\Path\New\', true, 0, 'myfile' ); // " and name it "myfile"
+$phpFileHandler->save( 'C:/The/Save/Path/' ); // save all valid files (phpFileHandler->Files_valid) to the given location
+$phpFileHandler->save( 'C:/The/Save/Path/New/', true ); // allow phpFileHandler to create non existing paths (recursive)
+$phpFileHandler->save( 'C:/The/Save/Path/New/', true, 0 ); // save only the file on index '0' to from phpFileHandler->Files_valid
+$phpFileHandler->save( 'C:/The/Save/Path/New/', true, 0, 'myfile' ); // " and name it "myfile"
 
 
 ```
