@@ -21,8 +21,8 @@ The following (common) media files are checked with their first bytes notation:
 require 'phpFileHandler.php';
 
 $phpFileHandler = new phpFileHandler;  // create phpFileHandler object
-$phpFileHandler->add_uploaded_files();  // Add all uploaded files from the superglobal $_FILES
-$phpFileHandler->save( '/Path/To/Save/' ); // Save all valid files to the given location
+$phpFileHandler->add_uploaded_files();  // Add all uploaded files from the $_FILES superglobal 
+$phpFileHandler->save( '/Path/To/Save/' ); // Save all valid files with a new unique name (12 characters long) to the given location 
 
 ```
 
