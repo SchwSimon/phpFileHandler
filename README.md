@@ -20,9 +20,9 @@ The following (common) media files are checked with their first bytes notation:
 <?php
 require 'phpFileHandler.php';
 
-$phpFileHandler = new phpFileHandler;
-$phpFileHandler->add_uploaded_files();
-$phpFileHandler->save( '/Path/To/Save/' );
+$phpFileHandler = new phpFileHandler;  // create phpFileHandler object
+$phpFileHandler->add_uploaded_files();  // Add all uploaded files from the superglobal $_FILES
+$phpFileHandler->save( '/Path/To/Save/' ); // Save all valid files to the given location
 
 ```
 
