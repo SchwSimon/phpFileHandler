@@ -60,7 +60,7 @@ $phpFileHandler->add_existing_files( 'C:/Apache24/htdocs/domain/data/my_file.txt
 // File key infos
 // not all of the keys are availible for invalid files
 // array(
-//  "path" => *file location*,                (string)
+//  "path" => *full file location*,           (string)
 //  "origname" => *original filename*,        (string) // the full url for files added via ->add_file_from_url()
 //  "name" => *filename*,                     (string) // for new files the temporary filename (before ->save() got called) is NOT "name"
 //  "savename" => *filename with extension*,  (string) // before ->save() got called only for ->add_existing_files() not null
@@ -88,5 +88,7 @@ $phpFileHandler->save( 'C:/The/Save/Path/New/', true ); // allow phpFileHandler 
 $phpFileHandler->save( 'C:/The/Save/Path/New/', true, 0 ); // save only the file on index '0' to from phpFileHandler->Files_valid
 $phpFileHandler->save( 'C:/The/Save/Path/New/', true, 0, 'myfile' ); // " and name it "myfile"
 
+
+// Image handling next...
 
 ```
