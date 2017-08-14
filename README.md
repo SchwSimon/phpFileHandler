@@ -62,7 +62,7 @@ $phpFileHandler->add_existing_files( 'C:/Apache24/htdocs/domain/data/my_file.txt
 // array(
 //  "path" => *file location*,                (string)
 //  "origname" => *original filename*,        (string) // the full url for files added via ->add_file_from_url()
-//  "name" => *filename*,                     (string) // for new files the temporary filename != "name", after ->save() it is
+//  "name" => *filename*,                     (string) // for new files the temporary filename (before ->save() got called) is NOT "name"
 //  "savename" => *filename with extension*,  (string) // before ->save() got called only for ->add_existing_files() not null
 //  "isnew" => *new file?*,                   (boolean)
 //  "size" => *filesize*,                     (integer)
