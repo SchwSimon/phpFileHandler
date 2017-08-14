@@ -14,7 +14,19 @@ The following (common) media files are checked with their first bytes notation:
  - mp4
  - webm
 
-## How to use
+## How to use (minimum)
+
+```php
+<?php
+require 'phpFileHandler.php';
+
+$phpFileHandler = new phpFileHandler;
+$phpFileHandler->add_uploaded_files();
+$phpFileHandler->save( '\Path\To\Save\' );
+
+```
+
+## How to use (all options)
 
 ```php
 <?php
@@ -28,16 +40,13 @@ $phpFileHandler = new phpFileHandler;
 // optional filesize limit, if not set the php.ini 'upload_max_filesize' will be used.
 // @param integer $filesize in Megabyte
 $phpFileHandler->setMaxFileSize( 8 );
-// optioanl you can pass $filesize in bytes with the second parameter set to false
-$phpFileHandler->setMaxFileSize( 8000000, false );
+$phpFileHandler->setMaxFileSize( 8000000, false ); // optioanl you can pass $filesize in bytes with the second parameter set to false
 
 // set the allowed filetypes for the next file adds by passing an array with the allowed extensions
 // for default all filetypes are allowed
 $phpFileHandler->setAllowedFileTypes( ['jpg','gif','png'] );
-// or use the phpFileHandler presets
-$phpFileHandler->setAllowedFileTypes( phpFileHandler::FTY_IMAGES_COMMON );
-// pass false to reset to default
-$phpFileHandler->setAllowedFileTypes( false );  
+$phpFileHandler->setAllowedFileTypes( phpFileHandler::FTY_IMAGES_COMMON ); // or use the phpFileHandler presets
+$phpFileHandler->setAllowedFileTypes( false );  // pass false to reset to default
 
 // adds all files which were uploaded via html form or ajax to phpFileHandler
 $phpFileHandler->add_uploaded_files();
@@ -65,6 +74,16 @@ $phpFileHandler->Files_invalid_count  // Invalid files count
 $phpFileHandler->File                 // All uploaded files 
 $phpFileHandler->Files_count          // Uploaded files count
 
+// by default the save filenames will be a unique string (with a length of 12 characters)
+// you can change the length of the filesnames
+$phpFileHandler->setUniqFilenames( true, 20 );  // filenames will now be 20 characters long
+$phpFileHandler->setUniqFilenames( false ); // or do not generate unique filenames, now the filenames will keep their original names
+
+// 
+$phpFileHandler->save( 'C:\The\Save\Path\' ); // save all valid files (phpFileHandler->Files_valid) to the given location
+$phpFileHandler->save( 'C:\The\Save\Path\New\', true ); // allow phpFileHandler to create non existing paths (recursive)
+$phpFileHandler->save( 'C:\The\Save\Path\New\', true, 0 ); // save only the file on index '0' to from phpFileHandler->Files_valid
+$phpFileHandler->save( 'C:\The\Save\Path\New\', true, 0, 'myfile' ); // " and name it "myfile"
 
 
 ```
