@@ -58,9 +58,12 @@ $phpFileHandler->add_file_from_url( 'https://flushmodules.com/data/users/1/5wi77
 $phpFileHandler->add_existing_files( 'C:/Apache24/htdocs/domain/data/my_file.txt' );
 
 // File key infos
+// not all of the keys are availible for invalid files
 // array(
-//  "path" => *current file location*,        (string)
-//  "name" => *original filename*,            (string)
+//  "path" => *file location*,                (string)
+//  "origname" => *original filename*,        (string) // the full url for files added via ->add_file_from_url()
+//  "name" => *filename*,                     (string) // for new files the temporary filename != "name", after ->save() it is
+//  "savename" => *filename with extension*,  (string) // before ->save() got called only for ->add_existing_files() not null
 //  "isnew" => *new file?*,                   (boolean)
 //  "size" => *filesize*,                     (integer)
 //  "error" => *invalid file error message*,  (string)
