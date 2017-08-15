@@ -46,10 +46,11 @@ $phpFileHandler->save( '/Path/To/Save/' ); // Save all valid files with a new un
 - **_setAllowedFileTypes()_**	// default: false  
 	Set allowed file types, if not set (or false is passed) all filetypes are allowed  
 	Example for 'jpg' and 'png' only: **->setAllowedFileTypes( ['jpg','png'] );**  
-	Presets can be used:	- **phpFileHandler::FTY_IMAGES_COMMON** // ['jpg','gif','png']  
-												- **phpFileHandler::FTY_IMAGES_GD** // ['jpg','gif','png','gd','gd2','bmp','wbmp','webp','xbm','xpm']  
-												- **phpFileHandler::FTY_VIDEO_COMMON** // ['mp4','webm']  
-												- **phpFileHandler::FTY_MEDIA_COMMON** // ['jpg','gif','png','mp4','webm']  
+	Presets can be used:  
+    - **phpFileHandler::FTY_IMAGES_COMMON** // ['jpg','gif','png']  
+    - **phpFileHandler::FTY_IMAGES_GD** // ['jpg','gif','png','gd','gd2','bmp','wbmp','webp','xbm','xpm']  
+    - **phpFileHandler::FTY_VIDEO_COMMON** // ['mp4','webm']  
+    - **phpFileHandler::FTY_MEDIA_COMMON** // ['jpg','gif','png','mp4','webm']  
 	
 - **_setStrictFilecheck()_**	// default: false  
 	If set to true only files can pass which signature can be identified by **phpFileHandler::guess_fileextension()**  
