@@ -8,13 +8,12 @@ All in one PHP file handling class
 
 Image files are NOT checked with the use of exif_imagetype.
 Extensions are guessed with their file signature!
-Following filetypes can be detected:
- - jpg (jpeg)
- - gif
- - png
- - bmp
- - mp4
- - webm
+Following file types can be detected from the file's signature:
+
+jpg (jpeg), gif, png, bmp,
+mp4, webm, webp, gzip, 7zip,
+rar, exe, tif, tiff, pdf, wav,
+avi, xml, mp3, wmv, wma
 
 ## How to use (minimum)
 
