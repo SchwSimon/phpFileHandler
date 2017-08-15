@@ -7,10 +7,12 @@ All in one PHP file handling class
 ## File sanity
 
 Image files are NOT checked with the use of exif_imagetype.
-The following (common) media files are checked with their first bytes notation:
+Extensions are guessed with their file signature!
+Following filetypes can be detected:
  - jpg (jpeg)
  - gif
  - png
+ - bmp
  - mp4
  - webm
 
