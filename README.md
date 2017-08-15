@@ -1,6 +1,7 @@
 # phpFileHandler
 
 All in one PHP file handling class
+- Including image handling!
 
 (Started 13.08.2017, not yet finished with the initial build)
 
@@ -19,7 +20,7 @@ If the filetype could not be recognized, the mime string or at last the original
 You can enable strict file type checking, so the added files must meet one of the upper file signatures to pass.
 $phpFileHandler->setStrictFilecheck( true );
 
-## How to use (minimum)
+## Usage (minimum)
 
 ```php
 <?php
@@ -31,16 +32,10 @@ $phpFileHandler->save( '/Path/To/Save/' ); // Save all valid files with a new un
 
 ```
 
-## How to use (all options)
+## Documentation
+
 
 ```php
-<?php
-require 'phpFileHandler.php';
-
-// Adding uploaded files, uploaded via HTML form or JS Ajax
-// regardless of whether multiple or one single file
-// @add_uploaded_files() will check the PHP superglobal $_FILES for uploaded files
-$phpFileHandler = new phpFileHandler;
 
 // optional filesize limit, if not set the php.ini 'upload_max_filesize' will be used.
 // @param integer $filesize in Megabyte
