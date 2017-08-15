@@ -85,10 +85,10 @@ The adding process add an file data element for each file into:
 		'-> phpFileHandler::Files_count  
 
 A file data element looks like this:  
-array(  
-	"path" => 'C:/Apache24/htdocs/data/temp/8dsfsa98df6.jpg', // the full filepath  
+**array(**  
+	**"path"** => 'C:/Apache24/htdocs/data/temp/8dsfsa98df6.jpg', // the full filepath  
   "origname" => 'Origin$alF &il eName.jpg', // original filename, for files from an web url this is the web url  
-  "name" => 'OriginalFileName',	// for uploaded files name will be a *_stripped_* version of "origname", for files from a web url "name" will be the last url part ('https://flushmodules.com/data/image.jpg' -> 'image.jpg' )  
+  "name" => 'OriginalFileName',	// for uploaded files name will be a **stripped** version of "origname", for files from a web url "name" will be the last url part ('https://flushmodules.com/css/visuals/fm-icons.png' -> 'fm-icons.png' )
   "savename" => 'OriginalFileName.jpg',  
   "isnew" => true, // only false when file was added via phpFileHandler::add_existing_files()  
   "size" => 600000, // in bytes  
