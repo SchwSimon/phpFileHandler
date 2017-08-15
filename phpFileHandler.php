@@ -103,10 +103,12 @@
 		 * @var integer ERR_FILE_UPLOAD_SIZE file exceeding the maximum filesize limit
 		 * @var integer ERR_FILE_TYPE filetype is not allowed
 		 * @var integer ERR_FILE_URL_READ could not reach or read the file from the URL location
+		 * @var integer ERR_FILE_NOTEXIST file does not exist
 		 */
 		const ERR_FILE_UPLOAD_SIZE = 0;
 		const ERR_FILE_TYPE = 1;
 		const ERR_FILE_URL_READ = 2;
+		const ERR_FILE_NOTEXIST = 3;
 		
 		/**
 		 * Constructor
@@ -256,13 +258,17 @@
 		public function add_existing_files( $filenames ) {
 			$filenames = (array)$filenames;
 			for( $i = 0, $count = count( $filenames ); $i < $count; $i++ ) {
-				$pathinfo = pathinfo( $filenames[$i] );
-				$this->process_file_add( array(	'path'	=> $filenames[$i],
-																'origname' => $pathinfo['basename'],
-																'name' => $pathinfo['basename'],
-																'savename' => $pathinfo['basename'] . '.' . $pathinfo['extension'],
-																'isnew' => false,
-																'ext' => $pathinfo['extension']	)	);
+				if ( file_exists( $filenames[$i] ) ) {
+					$pathinfo = pathinfo( $filenames[$i] );
+					$this->process_file_add( array(	'path'	=> $filenames[$i],
+																	'origname' => $pathinfo['basename'],
+																	'name' => $pathinfo['basename'],
+																	'savename' => $pathinfo['basename'] . '.' . $pathinfo['extension'],
+																	'isnew' => false,
+																	'ext' => $pathinfo['extension']	)	);
+				} else {
+					$this->add_invalid_file( array( 'path' => $filenames[$i] ), self::ERR_FILE_NOTEXIST ); 
+				}
 			}
 		}
 		
@@ -289,7 +295,7 @@
 			
 			if ( !isset( $file['ext'] ) || empty( $file['ext'] ) ) {
 				// guess the file extension
-				$file['ext'] = guess_fileextension( $bytestream );
+				$file['ext'] = guess_fileextension( null, $bytestream );
 				if ( !$file['ext'] ) {
 					// if file extension could not be guessed and @is_strict_filetypes is set to true.. dont let the file pass
 					if ( $this->is_strict_filetypes ) {
@@ -450,29 +456,10 @@
 		}
 		
 		/**
-		 * Checks the bytestream if it matches with the given extension
-		 * if the file signature of the file match with the given file type
-		 * @param string $bytestream A raw file content as string
-		 * @param string $ext An error severity constant
-		 * @return boolean | integer if the file does not prove as common media file return will be positive integer
-		 */
-		// public static function check_mediafile( $bytestream, $ext = '' ) {
-			// $hexArr = self::bytestreamToHexCheckArray( $bytestream, $ext );
-			// switch( $ext ) {
-				// case 'jpg': { return self::is_jpg( null, $hexArr ); } break;
-				// case 'gif': { return self::is_gif( null, $hexArr ); } break;
-				// case 'png': { return self::is_png( null, $hexArr ); } break;
-				// case 'bmp': { return self::is_bmp( null, $hexArr ); } break;
-				// case 'mp4': { return self::is_mp4( null, $hexArr ); } break;
-				// case 'webm': { return self::is_webm( null, $hexArr ); } break;
-				// default: return 1;
-			// }
-		// }
-		
-		/**
 		 * Gets the raw file byte data as string
 		 * @param string $filename Path to the file
 		 * @return string The raw byte stream from the given file as string
+		 * @throws Exception
 		 */
 		protected static function fileToByteStream( $filename, $isUrl = false ) {
 			if ( $isUrl ) {
@@ -505,9 +492,12 @@
 		 * Guesses the file's type by checking its signature
 		 * @param string $bytestream A raw file content as string
 		 * @return string | boolean Return the guessed file extension or false if none of the following signature could be found:
-		 * * jpg, gif, png, bmp, webp, mp4, webm
+		 * * jpg (jpeg), gif, png, bmp, mp4, webm, webp, gzip, 7zip, rar, exe, tif, tiff, pdf, wav, avi, xml, mp3, wmv, wma
 		 */
-		public static function guess_fileextension( $bytestream ) {
+		public static function guess_fileextension( $filename = null, $bytestream = null ) {
+			if ( $filename ) {
+				$bytestream = self::fileToByteStream( $filename );
+			}
 			$hexArr = self::bytestreamToHexCheckArray( $bytestream );
 			switch( $hexArr[0] ) {
 				case 'FF': { return ( self::is_jpg( null, $hexArr ) ) ? 'jpg' : (( self::is_mp3( null, $hexArr ) ) ? 'mp3' : false ); } break;
@@ -558,8 +548,7 @@
 		
 		/**
 		 * Checks if the file signature given as hexadecimal array is correct
-		 * * currently checking following types
-		 * * jpg, gif, png, bmp, mp4, webm
+		 * * see the description of ->guess_fileextension() for a list of checked file types
 		 * @param string $filename The path to the file
 		 * @param array $hexArr An array containing hexadecimal representation of bytes from a file
 		 */
@@ -718,6 +707,7 @@
 				case self::ERR_FILE_UPLOAD_SIZE: { $errorMsg = 'Exceeding the maximum upload file size. '; } break;
 				case self::ERR_FILE_TYPE: { $errorMsg = 'Filetype not allowed.'; } break;
 				case self::ERR_FILE_URL_READ: { $errorMsg = 'Could not fetch the file from the web address.'; } break;
+				case self::ERR_FILE_NOTEXIST: { $errorMsg = 'This file does not exist (anymore?).'; } break;
 			}
 			$file['error'] = $errorMsg;
 			$file['isvalid'] = false;
@@ -773,12 +763,13 @@
 	 *
 	 **/
 
-		/* Create a thumbnail in the same folder as the reference image
+		/*
+		 * Create a thumbnail in the same folder as the reference image
 		 * if $filename is null, it will create a thumb from every image file from @phpFileHandler->Files_valid
 		 * @param string $size See @param $type for explanation
 		 * @param string $to Set a save path for the thumb
 		 * @param string $filename Path to the image file
-		 * @param string $type An image resource possible type:
+		 * @param string $type The thumb generation type
 		 * * If the image is smaller than $size it will just create a copy with the prefixed name
 		 * * '': $size will define the maximum height or width depending on the largest side, image will scale down proportional
 		 * * 'iso': The image will be cropped centered to a Isosceles square each side with the lenght of $size
@@ -812,6 +803,35 @@
 					$image = self::create_image( $filename, $ext, $size, $type );
 					self::save_image( $image, $savepath, $ext, $prefix );
 				}
+			}
+		}
+		
+		/*
+		 * Resizes the image proportional
+		 * * see @thumb() description for the details
+		 * @param string $filename Path to the image file
+		 * @param string $size See @param $type for explanation
+		 * @param string $to Set a save path for the thumb
+		 * @param string $prefix If not set the file will be overwritten (if the output is in the same folder)
+		 */
+		public function resize( $filename, $size, $to = null, $prefix = '' ) {
+			$this->thumb( $size, $to, $filename, '', $prefix );
+		}
+		
+		/*
+		 * Converts an image file to the given ouput type
+		 * @param string $filename Path to the image file
+		 * @param string $output_type The output file type (see @save_image() for which output types are supported)
+		 * @param boolean $keep whether to keep or delete the original file 
+		 */
+		public function convert( $filename, $output_type, $keep = false ) {
+			if ( !file_exists( $filename ) ) {
+				throw new Exception( htmlspecialchars( $filename ) . ' does not exist.' );
+			}
+			$image = self::create_image( $filename );
+			self::save_image( $image, $filename, $output_type );
+			if ( !$keep ) {
+				unlink( $filename );
 			}
 		}
 		
@@ -867,16 +887,17 @@
 		
 		/**
 		 * Generates the settings for the thumb used in imagecopyresampled() function
+		 * * NOTE: imagecreatefrombmp is only availible for PHP 7 >= 7.2.0
+		 * * NOTE: imagecreatefromwebp is only availible for PHP 5 >= 5.5.0, PHP 7
 		 * @param integer $width Orignial image width
 		 * @param integer $height Orignial image height
 		 * @param integer $size The destination size
 		 * @param string $type An image resource possible type
-		 * @return array | boolean
-		 * * false: if the destination size is bigger than the original
-		 * * array with the calculated destination 'width', 'height', 'x', 'y'
+		 * @return resource An image resource
 		 */
-		private function create_image( $filename, $ext, $size, $type ) {
+		private function create_image( $filename, $ext = null, $size = null, $type = null ) {
 			// create an image resource from the original image
+			$ext = ( !$ext ) ? substr( strrchr( $filename, '.' ), 1 ) : $ext;
 			switch( $ext ) {
 				case 'jpeg':
 				case 'jpg': { $image = imagecreatefromjpeg( $filename ); } break;
@@ -891,62 +912,66 @@
 				default: throw new Exception( 'GD extension cannot create an image from this image type ("' . htmlspecialchars( $ext ) . '")' ); 
 			}
 			
-			$image_width = imagesx( $image );
-			$image_height = imagesy( $image );
-			
-			// get the settings for the thumb image creation
-			$settings = self::generate_thumbsettings( $image_width, $image_height, $size, $type );
+			if ( $size && $type ) {
+				$image_width = imagesx( $image );
+				$image_height = imagesy( $image );
+				
+				// get the settings for the thumb image creation
+				$settings = self::generate_thumbsettings( $image_width, $image_height, $size, $type );
 
-			// settings return false if the destination $size is bigger than the original image
-			if ( $settings ) {
-				// create a new empty image
-				$thumb_image = imagecreatetruecolor( $settings['dst_width'], $settings['dst_height'] );
-				if ( $ext !== 'jpeg' && $ext !== 'jpg' ) {
-					// create an alpha canal for the image and set the background to fully transparent
-					imagecolortransparent( $thumb_image, imagecolorallocatealpha( $thumb_image, 0, 0, 0, 127 ) );
-					imagealphablending( $thumb_image, false );
-					imagesavealpha( $thumb_image, true );
+				// settings return false if the destination $size is bigger than the original image
+				if ( $settings ) {
+					// create a new empty image
+					$new_image = imagecreatetruecolor( $settings['dst_width'], $settings['dst_height'] );
+					if ( $ext !== 'jpeg' && $ext !== 'jpg' ) {
+						// create an alpha canal for the image and set the background to fully transparent
+						imagecolortransparent( $new_image, imagecolorallocatealpha( $new_image, 0, 0, 0, 127 ) );
+						imagealphablending( $new_image, false );
+						imagesavealpha( $new_image, true );
+					}
+					imagecopyresampled(
+						$new_image, $image,									//	dst_image,	src_image,
+						0, 0,																//	dst_x,			dst_y,
+						$settings['x'], $settings['y'],								//	src_x,			src_y,
+						$settings['dst_width'], $settings['dst_height'],	//	dst_w,			dst_h,
+						$image_width, $image_height							//	src_w,			src_h
+					);
+
+					return $new_image;
 				}
-				imagecopyresampled(
-					$thumb_image, $image,									//	dst_image,	src_image,
-					0, 0,																//	dst_x,			dst_y,
-					$settings['x'], $settings['y'],								//	src_x,			src_y,
-					$settings['dst_width'], $settings['dst_height'],	//	dst_w,			dst_h,
-					$image_width, $image_height							//	src_w,			src_h
-				);
-
-				return $thumb_image;
-			} else {
-				return $image;
 			}
+			
+			return $image;
 		}
 		
 		/**
 		 * Saves an image resource to a file 
 		 * NOTE that this function will overwrite an existing file with the same name
 		 * @param resource $image An image resource
-		 * @param string $filename The path to save the image
+		 * @param string $filename The full image saving path
 		 * @param string $ext The filetype extension
 		 * @param string $prefix Adds a prefix after the filename ( 'image.jpg' -> 'image_thumb.jpg' )
 		 */
-		public static function save_image( $image, $filename, $ext, $prefix = '' ) {
-			if ( !empty( $prefix ) ) {
-				$filename = substr( $filename, 0, strrpos( $filename, '.' )  ) . $prefix . strrchr( $filename, '.' );
+		protected static function save_image( $image, $saveto, $output_type, $prefix = '' ) {
+			$ext = substr( strrchr( $saveto, '.' ), 1 );
+			// insert the prefix and / or
+			// force the output filename have the output_type extension
+			if ( !empty( $prefix ) || $ext !== $output_type ) {
+				$saveto = substr( $saveto, 0, strrpos( $saveto, '.' )  ) . $prefix . '.' . $output_type;
 			}
-			switch( $ext ) {
+			switch( $output_type ) {
 				case 'jpeg':
-				case 'jpg': { imagejpeg( $image, $filename ); } break;
-				case 'gif': { imagegif( $image, $filename ); } break;
-				case 'png': { imagepng( $image, $filename ); } break;
-				case 'gd': { imagegd( $image, $filename ); } break;
-				case 'gd2': { imagegd2( $image, $filename ); } break;
-				case 'bmp': { imagebmp( $image, $filename ); } break;
-				case 'wbmp': { imagewbmp( $image, $filename ); } break;
-				case 'webp': { imagewebp( $image, $filename ); } break;
-				case 'xbm': { imagexbm( $image, $filename ); } break;
+				case 'jpg': { imagejpeg( $image, $saveto ); } break;
+				case 'gif': { imagegif( $image, $saveto ); } break;
+				case 'png': { imagepng( $image, $saveto ); } break;
+				case 'gd': { imagegd( $image, $saveto ); } break;
+				case 'gd2': { imagegd2( $image, $saveto ); } break;
+				case 'bmp': { imagebmp( $image, $saveto ); } break;
+				case 'wbmp': { imagewbmp( $image, $saveto ); } break;
+				case 'webp': { imagewebp( $image, $saveto ); } break;
+				case 'xbm': { imagexbm( $image, $saveto ); } break;
 				default: throw new Exception( 'GD extension cannot create an image from this image type ("' . htmlspecialchars( $ext ) . '")' ); 
 			}
 		}
 		
 	}
-	
