@@ -1,14 +1,14 @@
 # phpFileHandler
 
-All in one PHP file handling class
+All in one PHP file handling class  
 - Including image handling!
 
 (Started 13.08.2017, not yet finished with the initial build)
 
 ## File sanity
 
-Image files are NOT checked with the use of exif_imagetype.
-Extensions are guessed with their file signature!
+Image files are NOT checked with the use of exif_imagetype.  
+Extensions are guessed with their file signature!  
 Following file types can be detected:
 
 jpg (jpeg), gif, png, bmp,
@@ -16,7 +16,7 @@ mp4, webm, webp, gzip, 7zip,
 rar, exe, tif, tiff, pdf, wav,
 avi, xml, mp3, wmv, wma
 
-If the filetype could not be recognized, the mime string or at last the original name extension will be taken.
+If the filetype could not be recognized, the mime string or at last the original name extension will be taken.  
 You can enable strict file type checking, so the added files must meet one of the upper file signatures to pass.
 
 $phpFileHandler->setStrictFilecheck( true );
