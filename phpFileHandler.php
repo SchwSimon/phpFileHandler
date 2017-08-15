@@ -343,22 +343,7 @@
 			if ( $this->is_gd2_ext ) {
 				// check the orientation for the common image types
 				if ( in_array( $file['ext'], self::FTY_IMAGES_GD ) ) {
-					// see https://en.wikipedia.org/wiki/Exif for more information
-					$exifReadData = exif_read_data( $file['path'] );
-					if ( !empty( $exifReadData['Orientation'] ) ) {
-						$newAngle = false;
-						switch( $exifReadData['Orientation'] ) {
-							case 3: { $newAngle = 180; } break;
-							case 6: { $newAngle = -90; } break;
-							case 8: { $newAngle = 90; } break;
-						}
-						if ( $newAngle ) {
-							// quick roation adjust
-							$image = imagecreatefromstring( $bytestream );
-							$image = imagerotate( $image, $newAngle, 0 );
-							self::save_image( $image, $file['path'], $file['ext'] );
-						}
-					}
+					$this->fix_orientation( $file['path'], $bytestream );
 				}
 			}
 			
@@ -835,6 +820,111 @@
 			}
 		}
 		
+		/*
+		 * Try to fix the image's orientation
+		 * @param string $filename Path to the image file
+		 * @param string $bytestream The raw image content
+		 */
+		public function fix_orientation( $filename, $bytestream = null ) {
+			if ( !file_exists( $filename ) ) {
+				throw new Exception( htmlspecialchars( $filename ) . ' does not exist.' );
+			}
+			$data = exif_read_data( $filename );
+			if ( !empty( $data['Orientation'] ) ) {
+				switch( $data['Orientation'] ) {
+					case 3: { $newAngle = 180; } break;
+					case 6: { $newAngle = -90; } break;
+					case 8: { $newAngle = 90; } break;
+					default: $newAngle = false;
+				}
+				if ( $newAngle ) {
+					$image = imagecreatefromstring( ( !$bytestream ) ? self::fileToByteStream( $filename ) : $bytestream );
+					$image = imagerotate( $image, $newAngle, 0 );
+					self::save_image( $image, $file['path'], $file['ext'] );
+				}
+			}
+		}
+		
+		/*
+		 * Adds an watermark to the image
+		 * @param string $target Path to the target image
+		 * @param string $watermark Path to the watermark image
+		 * @param float $opacity The watermark's opacity From 0 (fully transparent) to 1 (fully visible)
+		 * @param string $position The watermark's position
+		 * @param integer $offsetX Horizontal offset
+		 * @param integer $offsetY Vertical offset
+		 */
+		public function put_watermark( $target, $watermark, $opacity = 0.5, $position = 'center', $offsetX = 0, $offsetY = 0 ) {
+			if ( !file_exists( $target ) ) {
+				throw new Exception( $target . ' does not exist.' );
+			} else if ( !file_exists( $watermark )  ) {
+				throw new Exception( $watermark . ' does not exist.' );
+			}
+			
+			// keep the opacity value in range
+			$opacity = (( $opacity < 0 ) ? 0 : (( $opacity > 1 ) ? 1 : $opacity )) * 100;
+			
+			$target_image = self::create_image( $target );
+			$target_width = imagesx( $target_image );
+			$target_height = imagesy( $target_image );
+			
+			$watermark_image = self::create_image( $watermark );
+			$watermark_width = imagesx( $watermark_image );
+			$watermark_height = imagesy( $watermark_image );
+			
+			switch( $position ) {
+				case 'top': {
+					$x = ($target_width / 2) - ($watermark_width / 2) + $offsetX;
+					$y = $offsetY;
+				} break;
+				case 'left': {
+					$x = $offsetX;
+					$y = ($target_height / 2) - ($watermark_height / 2) + $offsetY;
+				} break;
+				case 'right': {
+					$x = $target_width - $watermark_width + $offsetX;
+					$y = ($target_height / 2) - ($watermark_height / 2) + $offsetY;
+				} break;
+				case 'bottom': {
+					$x = ($target_width / 2) - ($watermark_width / 2) + $offsetX;
+					$y = $target_height - $watermark_height + $offsetY;
+				} break;
+				case 'top left': {
+					$x = $offsetX;
+					$y = $offsetY;
+				} break;
+				case 'top right': {
+					$x = $target_width - $watermark_width + $offsetX;
+					$y = $offsetY;
+				} break;
+				case 'bottom left': {
+					$x = $offsetX;
+					$y = $target_height - $watermark_height + $offsetY;
+				} break;
+				case 'bottom right': {
+					$x = $target_width - $watermark_width + $offsetX;
+					$y = $target_height - $watermark_height + $offsetY;
+				} break;
+				default: {	// center
+					$x = ($target_width / 2) - ($watermark_width / 2) + $offsetX;
+					$y = ($target_height / 2) - ($watermark_height / 2) + $offsetY;
+				} break;
+			}
+			
+			if ( $opacity < 100 ) {
+				// workaround for transparent images because PHP's imagecopymerge does not support alpha channel
+				imagealphablending( $watermark_image, false );
+				imagefilter( $watermark_image, IMG_FILTER_COLORIZE, 0, 0, 0, 127 * ((100 - $opacity) / 100) );
+			}
+
+			// put the watermark on the target image
+			imagecopy( $target_image, $watermark_image, $x, $y, 0, 0, $watermark_width, $watermark_height );
+			
+			imagedestroy( $watermark_image );
+			
+			self::save_image( $target_image, $target );
+		}
+		
 		/**
 		 * Generates the settings for the thumb used in imagecopyresampled() function
 		 * @param integer $width Orignial image width
@@ -929,6 +1019,7 @@
 						imagealphablending( $new_image, false );
 						imagesavealpha( $new_image, true );
 					}
+					
 					imagecopyresampled(
 						$new_image, $image,									//	dst_image,	src_image,
 						0, 0,																//	dst_x,			dst_y,
@@ -936,7 +1027,9 @@
 						$settings['dst_width'], $settings['dst_height'],	//	dst_w,			dst_h,
 						$image_width, $image_height							//	src_w,			src_h
 					);
-
+					
+					imagedestroy( $image );
+					
 					return $new_image;
 				}
 			}
@@ -952,13 +1045,16 @@
 		 * @param string $ext The filetype extension
 		 * @param string $prefix Adds a prefix after the filename ( 'image.jpg' -> 'image_thumb.jpg' )
 		 */
-		protected static function save_image( $image, $saveto, $output_type, $prefix = '' ) {
+		protected static function save_image( $image, $saveto, $output_type = null, $prefix = '' ) {
 			$ext = substr( strrchr( $saveto, '.' ), 1 );
+			$output_type = ( !$output_type ) ? $ext : $output_type;
+			
 			// insert the prefix and / or
 			// force the output filename have the output_type extension
 			if ( !empty( $prefix ) || $ext !== $output_type ) {
 				$saveto = substr( $saveto, 0, strrpos( $saveto, '.' )  ) . $prefix . '.' . $output_type;
 			}
+			
 			switch( $output_type ) {
 				case 'jpeg':
 				case 'jpg': { imagejpeg( $image, $saveto ); } break;
@@ -972,6 +1068,8 @@
 				case 'xbm': { imagexbm( $image, $saveto ); } break;
 				default: throw new Exception( 'GD extension cannot create an image from this image type ("' . htmlspecialchars( $ext ) . '")' ); 
 			}
+			
+			imagedestroy( $image );
 		}
 		
 	}
