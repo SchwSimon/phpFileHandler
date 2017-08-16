@@ -1,9 +1,14 @@
 # phpFileHandler
 
 All in one PHP file handling class  
-- Including image handling!
 
-(Started 13.08.2017, not yet finished with the initial build)
+## Class Features
+
+- Handles complete file upload, sanitizing & saving process  
+- Secure file handling, wherever the possibility exists to overwrite another file the default behaviour is not todo so  
+- Secure folder deletion & emptying
+- Include the most common image handling features like thumb creation, resizing etc.
+
 
 ## Dependencies
 
@@ -217,6 +222,20 @@ phpFileHandler::uniqString( int $length = 12 )
 > *$copy* Set to true to copy the file to the given location by respecting *$allow_dir_create* & *$allow_override*
 ```php
 phpFileHandler::move_file( string $filename, string $to [, bool $allow_dir_create = false [, bool $copy = false [, bool $allow_override = false ]]] )
+```
+
+- **_delete_folder()_**  
+> Securely deletes a folder
+```php
+phpFileHandler::delete_folder( string $dir )
+```
+
+- **_emtpy_folder()_**  
+> Securely empties a folder  
+> *$keepSubFolders* Set to true if you do not want the subfolders to be deleted
+> *$fileExceptions* You can pass an array containing extension, files having such an extension will NOT be deleted
+```php
+phpFileHandler::emtpy_folder( string $dir [, bool $keepSubFolders = false [, mixed $fileExceptions = null ]] )
 ```
 
 - **_guess_fileextension()_**  
