@@ -123,12 +123,9 @@
 		 * Set the maximum filesize
 		 * @param integer $size The maximum filesize in megabytes, or "0" for no limit
 		 * @param boolean $isMB Wheter or not $size is in megabyte format
-		 * @throws Exception
 		 */
 		public function setMaxFileSize( $size, $isMB = true ) {
-			if ( $size < 0 ) {
-				throw new Exception( 'phpFileHandler->setMaxSize() @var $size must be greater or equal "0"' );
-			}
+			$size = ( $size < 0 ) ? 0 : $size;
 			// convert to byte if $isMB = true
 			$this->MaxFileSize = ( $isMB ) ? $size * 100000 : $size;
 		}
@@ -177,18 +174,17 @@
 		/**
 		 * Generate a unique random string (for multiple calls directly successively the $length should be atleast 10 otherwise it will generate the same strings )
 		 * @param integer $length The length of the output string, must be greater than 0
-		 * @throws Exception
+		 * @return string A unique alphanumeric string 
 		 */
 		public static function uniqString( $length = 12 ) {
-			if ( $length < 1 ) {
-				// if $length is less than 1 the output string would be ~9 characters long
-				throw new Exception( 'phpFileHandler::uniqString() @var $length must be greater than "0"' );
-			}
+			// if $length is less than 1 the output string would be ~9 characters long
+			$lenght = ( $length < 1 ) ? 1 : $length;
+			
 			$uString = base_convert( microtime( true ), 10, 36 );
 			$padLength = $length - strlen( $uString );
 			
-				// if $padLength is greater than 0, extend to string to the given $length using random byte generator combined with hex conversion
-				// else substring it to the given $length
+			// if $padLength is greater than 0, extend to string to the given $length using random byte generator combined with hex conversion
+			// else substring it to the given $length
 			if ( $padLength > 0 ) {
 				if ( version_compare( PHP_VERSION, '7.0.0' ) >= 0 ) {
 					$rBytes = random_bytes( ceil( $padLength / 2 ) );
@@ -199,6 +195,7 @@
 			} else {
 				$uString = substr( $uString, -$length );
 			}
+			
 			return $uString;
 		}
 		
@@ -207,7 +204,7 @@
 		 */
 		public function add_uploaded_files() {
 			if ( $this->is_add_uploaded ) {
-				throw new Exception( 'phpFileHandler->add_uploaded_files() already got called once.' );
+				return;
 			}
 			$this->is_add_uploaded = true;
 			foreach( $_FILES as $key => $data ) {
@@ -273,23 +270,15 @@
 		 */
 		protected function process_file_add( $file, $isUrl = false ) {
 			// get the raw file content
-			$bytestream = self::fileToByteStream( $file['path'], $isUrl );
+			$filecontent = self::getFileContents( $file['path'], $isUrl );
 			
-			if ( $isUrl ) {
-				if ( $bytestream === false || empty( $bytestream ) ) {
-					return $this->add_invalid_file( $file, self::ERR_FILE_URL_READ ); 
-				}
-				// filter the mime type out from the response headers
-				// for( $i = 0, $count = count( $http_response_header ); $i < $count; $i++ ) {
-					// if ( strpos( strtolower( $http_response_header[$i] ), 'content-type' ) !== false ) {
-						// $file['ext'] = explode( '/', trim( explode( ';', explode( ':', $http_response_header[$i], 2 )[1], 2 )[0] ), 2 )[1];
-					// }
-				// }
+			if ( $filecontent === false || empty( $filecontent ) ) {
+				return $this->add_invalid_file( $file, ( $isUrl ) ? self::ERR_FILE_URL_READ : self::ERR_FILE_NOTEXIST ); 
 			}
 			
 			if ( !isset( $file['ext'] ) || empty( $file['ext'] ) ) {
 				// guess the file extension
-				$file['ext'] = guess_fileextension( null, $bytestream );
+				$file['ext'] = guess_fileextension( null, $filecontent );
 				if ( !$file['ext'] ) {
 					// if file extension could not be guessed and @is_strict_filetypes is set to true.. dont let the file pass
 					if ( $this->is_strict_filetypes && $file['isnew'] ) {
@@ -306,7 +295,7 @@
 			
 			// get the file size using mb_strlen or strlen (fallback when php_mbstring module is not loaded)
 			// Note that this is only accurate when using mb_strlen because of mbstring.func_overload (which has been DEPRECATED as of PHP 7.2.0)
-			$filesize = ( $this->is_mbstring_ext ) ? mb_strlen( $bytestream, '8bit' ) : strlen( $bytestream );
+			$filesize = ( $this->is_mbstring_ext ) ? mb_strlen( $filecontent, '8bit' ) : strlen( $filecontent );
 			if ( $this->MaxFileSize !== 0 && $filesize > $this->MaxFileSize ) {
 				return $this->add_invalid_file( $file, self::ERR_FILE_UPLOAD_SIZE ); 
 			}
@@ -319,7 +308,7 @@
 				}
 				
 				// if its a known media file make a hard filetype check
-				// if ( !self::check_mediafile( $bytestream, $file['ext'] ) ) {
+				// if ( !self::check_mediafile( $filecontent, $file['ext'] ) ) {
 					// return $this->add_invalid_file( $file, self::ERR_FILE_TYPE ); 
 				// }
 			}
@@ -331,13 +320,13 @@
 			if ( $isUrl ) {
 				// generate a random temporary name for the file and save it to the system's default temp directory
 				$file['path'] = tempnam( sys_get_temp_dir(), self::uniqString( 24 ) );
-				file_put_contents( $file['path'], $bytestream );
+				file_put_contents( $file['path'], $filecontent );
 			}
 			
 			if ( $this->is_gd2_ext ) {
 				// check the orientation for the common image types
 				if ( in_array( $file['ext'], self::FTY_IMAGES_GD ) ) {
-					$this->fix_orientation( $file['path'], $bytestream );
+					$this->fix_orientation( $file['path'], $filecontent );
 				}
 			}
 			
@@ -351,8 +340,7 @@
 		 * @param boolean $allow_dir_create True to allow phpFileHandler to create the save path if not existing (recursive)
 		 * @param integer $file_index Index of an phpFileHandler->Files_valid file
 		 * @param string $name A custom filename when saving a single file
-		 * @throws Exception
-		 * @return boolean true on success false on failure AND null when passing an undefined *array index* 
+		 * @return boolean | null True on success, false on failure OR null when passing an undefined *array index*
 		 */
 		public function save( $to, $allow_dir_create = false, $file_index = null, $name = null ) {
 			$to = self::prepare_dir_string( $to );
@@ -399,22 +387,22 @@
 		 * @param string $to Move to path
 		 * @param boolean $allow_dir_create True to allow phpFileHandler to create the save path if not existing (recursive)
 		 * @param boolean $allow_override True to allow file override
-		 * @throws Exception
+		 * @return boolean True on success, False on failure
 		 */
 		public static function move_file( $filename, $to, $allow_dir_create = false, $copy = false, $allow_override = false ) {
 			if ( !$allow_override && file_exists( $filename ) ) {
-				throw new Exception( 'A file with the same name does already exist. (' . htmlspecialchars( $filename ) . ')' );
+				return false;
 			}
 			self::try_create_folder( $to, $allow_dir_create );
 			if ( $copy ) {
-				copy( $filename, $to );
+				return copy( $filename, $to );
 			} else {
 				if ( is_uploaded_file( $filename ) ) {
 					// for in this session uploaded files only
-					move_uploaded_file( $filename, $to );
+					return move_uploaded_file( $filename, $to );
 				} else {
 					// every other files
-					rename( $filename, $to );
+					return rename( $filename, $to );
 				}
 			}
 		}
@@ -422,7 +410,10 @@
 		/**
 		 * Trys to create a folder (recursive)
 		 * @param string $dir The folder path
-		 * @throws Exception
+		 * @param boolean $allow_dir_create
+		 * @throws Exception IF the folder does not exists AND:
+		 * * - $allow_dir_create is false
+		 * * - PHP has no permission to create folders at the given location
 		 */
 		protected static function try_create_folder( $dir, $allow_dir_create ) {
 			if ( !is_dir( $dir ) ) {
@@ -439,14 +430,14 @@
 		/**
 		 * Gets the raw file byte data as string
 		 * @param string $filename Path to the file
-		 * @return string The raw byte stream from the given file as string
-		 * @throws Exception
+		 * @return string | boolean The raw byte stream from the given file as string OR false if the file does not exist or the web url could not be reached
 		 */
-		protected static function fileToByteStream( $filename, $isUrl = false ) {
+		protected static function getFileContents( $filename, $isUrl = false ) {
+			$isUrl = ( !$isUrl && filter_var( $url, FILTER_VALIDATE_URL ) ) ? true : $isUrl;
 			if ( $isUrl ) {
 				// $filename is a web url
 				try {
-					$bytestream = file_get_contents(
+					$filecontent = file_get_contents(
 						$filename, false,
 						stream_context_create(
 							array(
@@ -462,50 +453,53 @@
 				}
 			} else {
 				if ( !file_exists( $filename ) ) {
-					throw new Exception( 'The file: ' . htmlspecialchars( $filename ) . ' does not exist.' );
+					return false;
 				}
-				$bytestream = file_get_contents( $filename );
+				$filecontent = file_get_contents( $filename );
 			}
-			return $bytestream;
+			return $filecontent;
 		}
 		
 		/**
 		 * Guesses the file's type by checking its signature
-		 * @param string $bytestream A raw file content as string
-		 * @return string | boolean Return the guessed file extension or false if none of the following signature could be found:
+		 * @param string $filecontent A raw file content as string
+		 * @return string | boolean Return the guessed file extension or false if the file or web url is invalid (see @->getFileContents()) none of the following signature could be found:
 		 * * jpg (jpeg), gif, png, bmp, mp4, webm, webp, gzip, 7zip, rar, exe, tif, tiff, pdf, wav, avi, xml, mp3, wmv, wma
 		 */
-		public static function guess_fileextension( $filename = null, $bytestream = null ) {
+		public static function guess_fileextension( $filename = null, $filecontent = null ) {
 			if ( $filename ) {
-				$bytestream = self::fileToByteStream( $filename );
-			} else if ( !$bytestream ) {
+				$filecontent = self::getFileContents( $filename );
+				if ( !$filecontent ) {
+					return false;
+				}
+			} else if ( !$filecontent ) {
 				throw new Exception( 'This function needs atleast one argument!' );
 			}
-			$hexArr = self::bytestreamToHexCheckArray( $bytestream );
-			switch( $hexArr[0] ) {
-				case 'FF': { return ( self::is_jpg( null, $hexArr ) ) ? 'jpg' : (( self::is_mp3( null, $hexArr ) ) ? 'mp3' : false ); } break;
-				case '47': { return ( self::is_gif( null, $hexArr ) ) ? 'gif' : false; } break;
-				case '89': { return ( self::is_png( null, $hexArr ) ) ? 'png' : false; } break;
-				case '42': { return ( self::is_bmp( null, $hexArr ) ) ? 'bmp' : false; } break;
-				case '52': { return ( self::is_webp( null, $hexArr ) ) ? 'webp' : (( self::is_rar( null, $hexArr ) ) ? 'rar' : false ); } break;
-				case '1F': { return ( self::is_gzip( null, $hexArr ) ) ? 'gz' : false; } break;
-				case '37': { return ( self::is_7zip( null, $hexArr ) ) ? '7z' : false; } break;
-				case '4D': { return ( self::is_exe( null, $hexArr ) ) ? 'exe' : (( self::is_tiff( null, $hexArr ) ) ? 'tiff' : false ); } break;
-				case '49': { return ( self::is_tiff( null, $hexArr ) ) ? 'tif' : (( self::is_mp3( null, $hexArr ) ) ? 'mp3' : false ); } break;
-				case '25': { return ( self::is_pdf( null, $hexArr ) ) ? 'pdf' : false; } break;
-				case '30': { return ( self::is_wmv( null, $hexArr ) ) ? 'wmv' : false; } break;
-				case '75': { return ( self::is_tar( null, $hexArr ) ) ? 'tar' : false; } break;
-				case '3C': { return ( self::is_xml( null, $hexArr ) ) ? 'xml' : false; } break;
+			$signature = self::getFileSignature( $filecontent );
+			switch( $signature[0] ) {
+				case 'FF': { return ( self::is_jpg( null, $signature ) ) ? 'jpg' : (( self::is_mp3( null, $signature ) ) ? 'mp3' : false ); } break;
+				case '47': { return ( self::is_gif( null, $signature ) ) ? 'gif' : false; } break;
+				case '89': { return ( self::is_png( null, $signature ) ) ? 'png' : false; } break;
+				case '42': { return ( self::is_bmp( null, $signature ) ) ? 'bmp' : false; } break;
+				case '52': { return ( self::is_webp( null, $signature ) ) ? 'webp' : (( self::is_rar( null, $signature ) ) ? 'rar' : false ); } break;
+				case '1F': { return ( self::is_gzip( null, $signature ) ) ? 'gz' : false; } break;
+				case '37': { return ( self::is_7zip( null, $signature ) ) ? '7z' : false; } break;
+				case '4D': { return ( self::is_exe( null, $signature ) ) ? 'exe' : (( self::is_tiff( null, $signature ) ) ? 'tiff' : false ); } break;
+				case '49': { return ( self::is_tif( null, $signature ) ) ? 'tif' : (( self::is_mp3( null, $signature ) ) ? 'mp3' : false ); } break;
+				case '25': { return ( self::is_pdf( null, $signature ) ) ? 'pdf' : false; } break;
+				case '30': { return ( self::is_wmv( null, $signature ) ) ? 'wmv' : false; } break;
+				case '75': { return ( self::is_tar( null, $signature ) ) ? 'tar' : false; } break;
+				case '3C': { return ( self::is_xml( null, $signature ) ) ? 'xml' : false; } break;
 				default: {
-					$hexArr = self::bytestreamToHexCheckArray( $bytestream, 4 );
-					switch( $hexArr[0] ) {
-						case '66': { return ( self::is_mp4( null, $hexArr ) ) ? 'mp4' : false; } break;
-						case '1A': { return ( self::is_webm( null, $hexArr ) ) ? 'webm' : false; } break;
+					$signature = self::getFileSignature( $filecontent, 4 );
+					switch( $signature[0] ) {
+						case '66': { return ( self::is_mp4( null, $signature ) ) ? 'mp4' : false; } break;
+						case '1A': { return ( self::is_webm( null, $signature ) ) ? 'webm' : false; } break;
 						default: {
-							$hexArr = self::bytestreamToHexCheckArray( $bytestream, 8 );
-							switch( $hexArr[0] ) {
-								case '57': { return ( self::is_wav( null, $hexArr ) ) ? 'wav' : false; } break;
-								case '41': { return ( self::is_avi( null, $hexArr ) ) ? 'avi' : false; } break;
+							$signature = self::getFileSignature( $filecontent, 8 );
+							switch( $signature[0] ) {
+								case '57': { return ( self::is_wav( null, $signature ) ) ? 'wav' : false; } break;
+								case '41': { return ( self::is_avi( null, $signature ) ) ? 'avi' : false; } break;
 							}
 						}
 					}
@@ -515,148 +509,118 @@
 		}
 		
 		/**
-		 * Converts raw bytestream file data to an array of x ($count) elements containing the hexadecimal representation of the bytes
-		 * @param string $bytestream Raw file data
+		 * Converts raw filecontent file data to an array of x ($count) elements containing the hexadecimal representation of the bytes
+		 * @param string $filecontent Raw file data
 		 * @param integer $index The starting index
 		 * @param integer $count The amount of bytes to convert and push into the returning array
 		 * @return array of hexadecimal string elements
 		 */
-		protected static function bytestreamToHexCheckArray( $bytestream, $index = 0, $count = 4 ) {
-			$hexArr = array();
+		public static function getFileSignature( $filecontent, $index = 0, $count = 4 ) {
+			$signature = array();
 			for( $range = $index + $count; $index < $range; $index++ ) {
-				$hexArr[] = ( isset( $bytestream[ $index ] ) ) ? strtoupper( bin2hex( $bytestream[ $index ] ) ) : '';
+				$signature[] = ( isset( $filecontent[ $index ] ) ) ? strtoupper( bin2hex( $filecontent[ $index ] ) ) : '';
 			}
-			return $hexArr;
+			return $signature;
+		}
+		
+		/**
+		 * Converts raw filecontent file data to an array of x ($count) elements containing the hexadecimal representation of the bytes
+		 * @param array $comparison A signature array as comparison reference
+		 * @param array $signature A signature array to compare against $comparison
+		 * @param string $filename A filepath to get the signature from and compare against $comparison
+		 * @param integer $index If $filename is given, $index defines the starting index from which byte to begin fetching the file's signature
+		 * @return boolean True if the signature array equals the comparison
+		 */
+		public static function compareFileSignature( $comparison, $signature = null, $filename = null, $index = 0 ) {
+			$count = count( $comparison );
+			if ( $filename ) {
+				$filecontent = self::getFileContents( $filename );
+				if ( !$filecontent ) {
+					return false;
+				}
+				$signature = self::getFileSignature( $filecontent, $index, $count );
+			}
+			for( $i = 0; $i < $count; $i++ ) {
+				if ( $comparison[$i] !== $signature[$i] ) {
+					return false;
+				}
+			}
+			return true;
 		}
 		
 		/**
 		 * Checks if the file signature given as hexadecimal array is correct
 		 * * see the description of ->guess_fileextension() for a list of checked file types
 		 * @param string $filename The path to the file
-		 * @param array $hexArr An array containing hexadecimal representation of bytes from a file
+		 * @param array $signature An array containing hexadecimal representation of bytes from a file
 		 */
-		public static function is_jpg( $filename = null, $hexArr = null ) {
-			if ( $filename ) {
-				$hexArr = self::bytestreamToHexCheckArray( self::fileToByteStream( $filename ), 0, 3 );
-			}
-			return ( $hexArr[0] === 'FF' && $hexArr[1] === 'D8' && $hexArr[2] === 'FF' ) ? true : false;
+		public static function is_jpg( $filename = null, $signature = null ) {
+			return self::compareFileSignature( array('FF','D8','FF'), $signature, $filename );
 		}
-		public static function is_gif( $filename = null, $hexArr = null ) {
-			if ( $filename ) {
-				$hexArr = self::bytestreamToHexCheckArray( self::fileToByteStream( $filename ), 0, 3 );
-			}
-			return ( $hexArr[0] === '47' && $hexArr[1] === '49' && $hexArr[2] === '46' ) ? true : false;
+		public static function is_gif( $filename = null, $signature = null ) {
+			return self::compareFileSignature( array('47','49','46'), $signature, $filename );
 		}
-		public static function is_png( $filename = null, $hexArr = null ) {
-			if ( $filename ) {
-				$hexArr = self::bytestreamToHexCheckArray( self::fileToByteStream( $filename ), 0, 3 );
-			}
-			return ( $hexArr[0] === '89' && $hexArr[1] === '50' && $hexArr[2] === '4E' ) ? true : false;
+		public static function is_png( $filename = null, $signature = null ) {
+			return self::compareFileSignature( array('89','50','4E'), $signature, $filename );
 		}
-		public static function is_bmp( $filename = null, $hexArr = null ) {
-			if ( $filename ) {
-				$hexArr = self::bytestreamToHexCheckArray( self::fileToByteStream( $filename ), 0, 2 );
-			}
-			return ( $hexArr[0] === '42' && $hexArr[1] === '4D' ) ? true : false;
+		public static function is_bmp( $filename = null, $signature = null ) {
+			return self::compareFileSignature( array('42','4D'), $signature, $filename );
 		}
-		public static function is_webp( $filename = null, $hexArr = null ) {
-			if ( $filename ) {
-				$hexArr = self::bytestreamToHexCheckArray( self::fileToByteStream( $filename ) );
-			}
-			return ( $hexArr[0] === '52' && $hexArr[1] === '49' && $hexArr[2] === '46' && $hexArr[3] === '46' ) ? true : false;
+		public static function is_webp( $filename = null, $signature = null ) {
+			return self::compareFileSignature( array('52','49','46','46'), $signature, $filename );
 		}
-		public static function is_mp4( $filename = null, $hexArr = null ) {
-			if ( $filename ) {
-				$hexArr = self::bytestreamToHexCheckArray( self::fileToByteStream( $filename ), 4 );
-			}
-			return ( $hexArr[0] === '66' && $hexArr[1] === '74' && $hexArr[2] === '79' && $hexArr[3] === '70' ) ? true : false;
+		public static function is_mp4( $filename = null, $signature = null ) {
+			return self::compareFileSignature( array('66','74','79','70'), $signature, $filename, 4 );
 		}
 		// detects a Matroska media container aka 'mkv', 'mka', 'mks', 'mk3d', 'webm'
-		public static function is_webm( $filename = null, $hexArr = null ) {
-			if ( $filename ) {
-				$hexArr = self::bytestreamToHexCheckArray( self::fileToByteStream( $filename ), 4 );
-			}
-			return ( $hexArr[0] === '1A' && $hexArr[1] === '45' && $hexArr[2] === 'DF' && $hexArr[3] === 'A3' ) ? true : false;
+		public static function is_webm( $filename = null, $signature = null ) {
+			return self::compareFileSignature( array('1A','45','DF','A3'), $signature, $filename, 4 );
 		}
-		public static function is_gzip( $filename = null, $hexArr = null ) {
-			if ( $filename ) {
-				$hexArr = self::bytestreamToHexCheckArray( self::fileToByteStream( $filename ), 0, 2 );
-			}
-			return ( $hexArr[0] === '1F' && $hexArr[1] === '8B' ) ? true : false;
+		public static function is_gzip( $filename = null, $signature = null ) {
+			return self::compareFileSignature( array('1F','8B'), $signature, $filename );
 		}
-		public static function is_7zip( $filename = null, $hexArr = null ) {
-			if ( $filename ) {
-				$hexArr = self::bytestreamToHexCheckArray( self::fileToByteStream( $filename ) );
-			}
-			return ( $hexArr[0] === '37' && $hexArr[1] === '7A' && $hexArr[2] === 'BC' && $hexArr[3] === 'AF' ) ? true : false;
+		public static function is_7zip( $filename = null, $signature = null ) {
+			return self::compareFileSignature( array('37','7A','BC','AF'), $signature, $filename );
 		}
-		public static function is_rar( $filename = null, $hexArr = null ) {
-			if ( $filename ) {
-				$hexArr = self::bytestreamToHexCheckArray( self::fileToByteStream( $filename ) );
-			}
-			return ( $hexArr[0] === '52' && $hexArr[1] === '61' && $hexArr[2] === '72' && $hexArr[3] === '21' ) ? true : false;
+		public static function is_rar( $filename = null, $signature = null ) {
+			return self::compareFileSignature( array('52','61','72','21'), $signature, $filename );
 		}
-		public static function is_exe( $filename = null, $hexArr = null ) {
-			if ( $filename ) {
-				$hexArr = self::bytestreamToHexCheckArray( self::fileToByteStream( $filename ), 0, 2 );
-			}
-			return ( $hexArr[0] === '4D' && $hexArr[1] === '5A' ) ? true : false;
+		public static function is_exe( $filename = null, $signature = null ) {
+			return self::compareFileSignature( array('4D','5A'), $signature, $filename );
 		}
-		// 49: little endian format, 4D: big endian format
-		public static function is_tiff( $filename = null, $hexArr = null ) {
-			if ( $filename ) {
-				$hexArr = self::bytestreamToHexCheckArray( self::fileToByteStream( $filename ) );
-			}
-			return (	($hexArr[0] === '49' && $hexArr[1] === '49' && $hexArr[2] === '2A' && $hexArr[3] === '00') ||
-						($hexArr[0] === '4D' && $hexArr[1] === '4D' && $hexArr[2] === '00' && $hexArr[3] === '2A') ) ? true : false;
+		// little endian format
+		public static function is_tif( $filename = null, $signature = null ) {
+			return self::compareFileSignature( array('49','49','2A','00'), $signature, $filename );
 		}
-		public static function is_pdf( $filename = null, $hexArr = null ) {
-			if ( $filename ) {
-				$hexArr = self::bytestreamToHexCheckArray( self::fileToByteStream( $filename ) );
-			}
-			return ( $hexArr[0] === '25' && $hexArr[1] === '50' && $hexArr[2] === '44' && $hexArr[3] === '46' ) ? true : false;
+		// big endian format
+		public static function is_tiff( $filename = null, $signature = null ) {
+			return self::compareFileSignature( array('4D','4D','00','2A'), $signature, $filename );
 		}
-		public static function is_wav( $filename = null, $hexArr = null ) {
-			if ( $filename ) {
-				$hexArr = self::bytestreamToHexCheckArray( self::fileToByteStream( $filename ), 8 );
-			}
-			return ( $hexArr[0] === '57' && $hexArr[1] === '41' && $hexArr[2] === '56' && $hexArr[3] === '45' ) ? true : false;
+		public static function is_pdf( $filename = null, $signature = null ) {
+			return self::compareFileSignature( array('25','50','44','46'), $signature, $filename );
 		}
-		public static function is_avi( $filename = null, $hexArr = null ) {
-			if ( $filename ) {
-				$hexArr = self::bytestreamToHexCheckArray( self::fileToByteStream( $filename ), 8 );
-			}
-			return ( $hexArr[0] === '41' && $hexArr[1] === '56' && $hexArr[2] === '49' && $hexArr[3] === '20' ) ? true : false;
+		public static function is_wav( $filename = null, $signature = null ) {
+			return self::compareFileSignature( array('57','41','56','45'), $signature, $filename, 8 );
 		}
-		public static function is_tar( $filename = null, $hexArr = null ) {
-			if ( $filename ) {
-				$hexArr = self::bytestreamToHexCheckArray( self::fileToByteStream( $filename ) );
-			}
-			return ( $hexArr[0] === '75' && $hexArr[1] === '73' && $hexArr[2] === '74' && $hexArr[3] === '61' ) ? true : false;
+		public static function is_avi( $filename = null, $signature = null ) {
+			return self::compareFileSignature( array('41','56','49','20'), $signature, $filename, 8 );
 		}
-		public static function is_xml( $filename = null, $hexArr = null ) {
-			if ( $filename ) {
-				$hexArr = self::bytestreamToHexCheckArray( self::fileToByteStream( $filename ) );
-			}
-			return ( $hexArr[0] === '3C' && $hexArr[1] === '3F' && $hexArr[2] === '78' && $hexArr[3] === '6D' ) ? true : false;
+		public static function is_tar( $filename = null, $signature = null ) {
+			return self::compareFileSignature( array('75','73','74','61'), $signature, $filename );
+		}
+		public static function is_xml( $filename = null, $signature = null ) {
+			return self::compareFileSignature( array('3C','3F','78','6D'), $signature, $filename );
 		}
 		// 49: mp3 with an ID3v2 container, FF: MPEG-1 Layer 3 without and ID3 tag or with an ID3v1 tag at the end of the file
-		public static function is_mp3( $filename = null, $hexArr = null ) {
-			if ( $filename ) {
-				$hexArr = self::bytestreamToHexCheckArray( self::fileToByteStream( $filename ), 0, 3 );
-			}
-			return (	($hexArr[0] === '49' && $hexArr[1] === '44' && $hexArr[2] === '33') ||
-						($hexArr[0] === 'FF' && $hexArr[1] === 'FB')	) ? true : false;
+		public static function is_mp3( $filename = null, $signature = null ) {
+			return self::compareFileSignature( array('49','44','33'), $signature, $filename ) || self::compareFileSignature( array('FF','FB'), $signature, $filename );
 		}
-		public static function is_wmv( $filename = null, $hexArr = null ) {
-			if ( $filename ) {
-				$hexArr = self::bytestreamToHexCheckArray( self::fileToByteStream( $filename ) );
-			}
-			return ( $hexArr[0] === '30' && $hexArr[1] === '26' && $hexArr[2] === 'B2' && $hexArr[3] === '75' ) ? true : false;
+		public static function is_wmv( $filename = null, $signature = null ) {
+			return self::compareFileSignature( array('30','26','B2','75'), $signature, $filename );
 		}
 		// wma is identical to wmv in its basic internal structure, only difference is the extension and mime type..
-		public static function is_wma( $filename = null, $hexArr = null ) {
-			return self::is_wma( $filename, $hexArr );
+		public static function is_wma( $filename = null, $signature = null ) {
+			return self::is_wma( $filename, $signature );
 		}
 		
 		/**
@@ -690,7 +654,7 @@
 				case self::ERR_FILE_UPLOAD_SIZE: { $errorMsg = 'Exceeding the maximum upload file size. '; } break;
 				case self::ERR_FILE_TYPE: { $errorMsg = 'Filetype not allowed.'; } break;
 				case self::ERR_FILE_URL_READ: { $errorMsg = 'Could not fetch the file from the web address.'; } break;
-				case self::ERR_FILE_NOTEXIST: { $errorMsg = 'This file does not exist (anymore?).'; } break;
+				case self::ERR_FILE_NOTEXIST: { $errorMsg = 'This file does not exist (anymore?) or is empty.'; } break;
 			}
 			$file['error'] = $errorMsg;
 			$file['isvalid'] = false;
@@ -809,7 +773,7 @@
 		 */
 		public function convert( $filename, $output_type, $keepOriginal = false ) {
 			if ( !file_exists( $filename ) ) {
-				throw new Exception( htmlspecialchars( $filename ) . ' does not exist.' );
+				throw new Exception( 'File does not exist (' . htmlspecialchars( $filename ) . ')' );
 			}
 			$image = self::create_image( $filename );
 			self::save_image( $image, $filename, $output_type );
@@ -821,11 +785,12 @@
 		/*
 		 * Try to fix the image's orientation
 		 * @param string $filename Path to the image file
-		 * @param string $bytestream The raw image content
+		 * @param string $filecontent The raw image content
+		 * @return boolean False if the file does not exists else true
 		 */
-		public function fix_orientation( $filename, $bytestream = null ) {
+		public function fix_orientation( $filename, $filecontent = null ) {
 			if ( !file_exists( $filename ) ) {
-				throw new Exception( htmlspecialchars( $filename ) . ' does not exist.' );
+				return false;
 			}
 			$data = exif_read_data( $filename );
 			if ( !empty( $data['Orientation'] ) ) {
@@ -836,11 +801,12 @@
 					default: $newAngle = false;
 				}
 				if ( $newAngle ) {
-					$image = imagecreatefromstring( ( !$bytestream ) ? self::fileToByteStream( $filename ) : $bytestream );
+					$image = imagecreatefromstring( ( !$filecontent ) ? self::getFileContents( $filename ) : $filecontent );
 					$image = imagerotate( $image, $newAngle, 0 );
 					self::save_image( $image, $file['path'], $file['ext'] );
 				}
 			}
+			return true;
 		}
 		
 		/*
@@ -854,9 +820,9 @@
 		 */
 		public function put_watermark( $target, $watermark, $opacity = 0.5, $position = 'center', $offsetX = 0, $offsetY = 0 ) {
 			if ( !file_exists( $target ) ) {
-				throw new Exception( $target . ' does not exist.' );
+				throw new Exception( 'Target file does not exist (' . htmlspecialchars( $target ) . ')' );
 			} else if ( !file_exists( $watermark )  ) {
-				throw new Exception( $watermark . ' does not exist.' );
+				throw new Exception( 'Watermark file does not exist (' . htmlspecialchars( $watermark ) . ')' );
 			}
 			
 			// keep the opacity value in range
