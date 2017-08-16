@@ -409,6 +409,53 @@
 		}
 		
 		/**
+		 * Securely deletes a folder
+		 * @param string $dir Folder path
+		 * @return boolean True on success, False on failure
+		 */
+		public static function delete_folder( $dir ) {
+			if ( !is_dir( $dir ) ) {
+				return false;
+			}
+			self::emtpy_folder( $dir )
+			return rmdir( $dir );
+		}
+		
+		/**
+		 * Securely empties a folder
+		 * @param string $dir Folder path
+		 * @param boolean $keepSubFolders Whether or not to keep the sub folders
+		 * @param array | string An array containing file extensions to avoid deleting (for a single extension a string can be passed too)
+		 * @return boolean True on success, False on failure
+		 */
+		public static function emtpy_folder( $dir, $keepSubFolders = false, $fileExceptions = null ) {
+			if ( !is_dir( $dir ) ) {
+				return false;
+			}
+			$fileExceptions = ( $fileExceptions ) ? (array)$fileExceptions : $fileExceptions;
+			$it = new RecursiveDirectoryIterator( $dir );
+			$it = new RecursiveIteratorIterator( $it, RecursiveIteratorIterator::CHILD_FIRST );
+			foreach( $it as $file ) {
+				if ( $file->getBasename() === "." || $file->getBasename() === ".." ) {
+					continue;
+				}
+				if ( $file->isDir() ) {
+					// keep sub folder?
+					if ( !$keepSubFolders ) {
+						rmdir( $file->getPathname() );	// delete folder
+					}
+				} else {
+					// is an exception file?
+					if ( $fileExceptions && in_array( $file->getExtension(), $fileExceptions ) ) {
+						continue;
+					}
+					unlink( $file->getPathname() );	// delete file
+				}
+			}
+			return true;
+		}
+		
+		/**
 		 * Trys to create a folder (recursive)
 		 * @param string $dir The folder path
 		 * @param boolean $allow_dir_create
