@@ -210,8 +210,8 @@ $phpFileHandler->put_watermark( string $target, string $watermark [, float $opac
 > Returning true on exact array match
 
 - **_is_XXX()_**  
-> Those functions determine whether or not the file's signature is correct
-> Note: this does not guarantee that the file really is file
+> Those functions determine whether or not the file's signature is correct  
+> Note: this does not guarantee that the file's content represent correct data!
 
 ```php
 phpFileHandler::uniqString( int $length = 12 )
