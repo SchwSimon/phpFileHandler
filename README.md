@@ -78,24 +78,24 @@ phpFileHandler::setUniqFilenameLength( integer $length = 12 )
 
 Files can only be added via following functions.  
 The adding process add an file data element for each file into:  
-⋅⋅⋅**phpFileHandler::Files_valid**		// files which have passed all sanity checks  
-⋅⋅⋅⋅⋅⋅**phpFileHandler::Files_valid_count**  
-⋅⋅⋅**phpFileHandler::Files_invalid**	// files which have failed at least one sanity check  
-⋅⋅⋅⋅⋅⋅**phpFileHandler::Files_invalid_count**  
-⋅⋅⋅**phpFileHandler::Files**					// All added files ( valid & invalid )  
-⋅⋅⋅⋅⋅⋅**phpFileHandler::Files_count**  
+   **phpFileHandler::Files_valid**	// files which have passed all sanity checks  
+   **phpFileHandler::Files_valid_count**  
+   **phpFileHandler::Files_invalid**	// files which have failed at least one sanity check  
+   **phpFileHandler::Files_invalid_count**  
+   **phpFileHandler::Files**		// All added files ( valid & invalid )  
+   **phpFileHandler::Files_count**  
 
 A file data element looks like this:  
 **array(**  
-⋅⋅⋅**"path" =>** 'C:/Apache24/htdocs/data/temp/8dsfsa98df6.jpg', // the full filepath  
-⋅⋅⋅**"origname" =>** 'Origin$alF &il eName.jpg', // original filename, for files from an web url this is the web url  
-⋅⋅⋅**"name" =>** 'OriginalFileName',	// for uploaded files name will be a **stripped** version of "origname", for files from a web url "name" will be the last url part ('https://flushmodules.com/css/visuals/fm-icons.png' -> 'fm-icons.png' )
-⋅⋅⋅**"savename" =>** 'OriginalFileName.jpg',  
-⋅⋅⋅**"isnew" =>** true, // only false when file was added via phpFileHandler::add_existing_files()  
-⋅⋅⋅**"size" =>** 600000, // in bytes  
-⋅⋅⋅**"error" =>** '', // the error message for invalid files  
-⋅⋅⋅**"isvalid" =>** true,  
-⋅⋅⋅**"ext" =>** 'jpg'  
+   **"path" =>** 'C:/Apache24/htdocs/data/temp/8dsfsa98df6.jpg', // the full filepath  
+   **"origname" =>** 'Origin$alF &il eName.jpg', // original filename, for files from an web url this is the web url  
+   **"name" =>** 'OriginalFileName',	// for uploaded files name will be a **stripped** version of "origname", for files from a web url "name" will be the last url part ('https://flushmodules.com/css/visuals/fm-icons.png' -> 'fm-icons.png' )
+   **"savename" =>** 'OriginalFileName.jpg',  
+   **"isnew" =>** true, // only false when file was added via phpFileHandler::add_existing_files()  
+   **"size" =>** 600000, // in bytes  
+   **"error" =>** '', // the error message for invalid files  
+   **"isvalid" =>** true,  
+   **"ext" =>** 'jpg'  
 **);**
 
 - **_add_uploaded_files()_**  
@@ -114,9 +114,9 @@ A file data element looks like this:
 > By default phpFileHandler will NOT create that folder for you, nevertheless you can pass **true** as second parameter to allow folder creation.  
 > You can also save single files from **phpFileHandler::Files_valid** by passing its *array index* as third parameter.  
 > It will return:  
-> ⋅⋅⋅- **true** on success 
-> ⋅⋅⋅- **false** on failure 
-> ⋅⋅⋅- **null** when passing an undefined *array index* 
+>    - **true** on success 
+>    - **false** on failure 
+>    - **null** when passing an undefined *array index* 
 > As fourth parameter you can choose a filename (_only when saving with **$file_index** set!_)
   
 
