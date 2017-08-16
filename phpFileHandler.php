@@ -417,7 +417,7 @@
 			if ( !is_dir( $dir ) ) {
 				return false;
 			}
-			self::emtpy_folder( $dir )
+			self::emtpy_folder( $dir );
 			return rmdir( $dir );
 		}
 		
