@@ -9,7 +9,7 @@
 		 * The phpFileHandler Version number
 		 * @var string
 		 */
-		public $Version = '0.1';
+		public $Version = '1.0';
 		
 		/**
 		 * Is ... extension loaded?
@@ -122,7 +122,7 @@
 		/**
 		 * Set the maximum filesize
 		 * @param integer $size The maximum filesize in megabytes, or "0" for no limit
-		 * @param boolean $isMB Wheter or not $size is in megabyte format
+		 * @param boolean $isMB Whether or not $size is in megabyte format
 		 */
 		public function setMaxFileSize( $size, $isMB = true ) {
 			$size = ( $size < 0 ) ? 0 : $size;
@@ -148,7 +148,7 @@
 		}
 		
 		/**
-		 * Wheter filechecking pass shall be strict or not
+		 * Whether filechecking pass shall be strict or not
 		 * @param boolean $bool
 		 */
 		public function setStrictFilecheck( $bool ) {
@@ -156,7 +156,7 @@
 		}
 		
 		/**
-		 * Wheter the filesnames will become a unique name after phpFileHandler->save() got called or not
+		 * Whether the filesnames will become a unique name after phpFileHandler->save() got called or not
 		 * @param boolean $bool
 		 */
 		public function setUniqFilenames( $bool ) {
@@ -326,7 +326,7 @@
 			if ( $this->is_gd2_ext ) {
 				// check the orientation for the common image types
 				if ( in_array( $file['ext'], self::FTY_IMAGES_GD ) ) {
-					$this->fix_orientation( $file['path'], $filecontent );
+					$this->fix_image_orientation( $file['path'], $filecontent );
 				}
 			}
 			
@@ -387,9 +387,10 @@
 		 * @param string $to Move to path
 		 * @param boolean $allow_dir_create True to allow phpFileHandler to create the save path if not existing (recursive)
 		 * @param boolean $allow_override True to allow file override
+		 * @param boolean $copy True to copy the file to the given location
 		 * @return boolean True on success, False on failure
 		 */
-		public static function move_file( $filename, $to, $allow_dir_create = false, $copy = false, $allow_override = false ) {
+		public static function move_file( $filename, $to, $allow_dir_create = false, $allow_override = false, $copy = false ) {
 			if ( !$allow_override && file_exists( $filename ) ) {
 				return false;
 			}
@@ -647,15 +648,16 @@
 		 * Adds an invalid file with its error to $Files_invalid
 		 * Secure for client output as error messge
 		 * @param array $file
-		 * @param integer $error An error severity constant
+		 * @param integer $errorCode An error severity constant
 		 */
-		protected function add_invalid_file( $file, $error ) {
-			switch( $error ) {
+		protected function add_invalid_file( $file, $errorCode ) {
+			switch( $errorCode ) {
 				case self::ERR_FILE_UPLOAD_SIZE: { $errorMsg = 'Exceeding the maximum upload file size. '; } break;
 				case self::ERR_FILE_TYPE: { $errorMsg = 'Filetype not allowed.'; } break;
 				case self::ERR_FILE_URL_READ: { $errorMsg = 'Could not fetch the file from the web address.'; } break;
 				case self::ERR_FILE_NOTEXIST: { $errorMsg = 'This file does not exist (anymore?) or is empty.'; } break;
 			}
+			$file['errorCode'] = $errorCode;
 			$file['error'] = $errorMsg;
 			$file['isvalid'] = false;
 			
@@ -674,6 +676,7 @@
 		 * @param array $file
 		 */
 		protected function add_valid_file( $file ) {
+			$file['errorCode'] = null;
 			$file['error'] = '';
 			$file['isvalid'] = true;
 			$file['name'] = ( empty( $file['name'] ) ) ? self::uniqString() : $file['name'];
@@ -714,16 +717,17 @@
 		 * Create a thumbnail in the same folder as the reference image
 		 * if $filename is null, it will create a thumb from every image file from @phpFileHandler->Files_valid
 		 * @param string $size See @param $type for explanation
-		 * @param string $to Set a save path for the thumb
-		 * @param string $filename Path to the image file
 		 * @param string $type The thumb generation type
 		 * * If the image is smaller than $size it will just create a copy with the prefixed name
-		 * * '': $size will define the maximum height or width depending on the largest side, image will scale down proportional
-		 * * 'iso': The image will be cropped centered to a Isosceles square each side with the lenght of $size
+		 * * - '': $size will define the maximum height or width depending on the largest side, image will scale down proportional
+		 * * - 'iso': The image will be cropped centered to a Isosceles square each side with the lenght of $size
 		 * @param string $prefix Adds a prefix after the filename ( 'image.jpg' -> 'image_thumb.jpg' )
 		 * * Note when you set an empty prefix if a file with the same name exists in the given directory it will be overwritten !
+		 * @param boolean $allowGrowth Whether or not to allow a bigger output image
+		 * @param string $to Set a save path for the thumb
+		 * @param string $filename Path to the image file
 		 */
-		public function thumb( $size, $to = null, $filename = null, $type = '', $prefix = '_thumb' ) {
+		public function thumb( $size, $type = '', $prefix = '_thumb', $allowGrowth = false, $to = null, $filename = null ) {
 			if ( $to ) {
 				if ( !is_dir( $to ) ) {
 					throw new Exception( htmlspecialchars( $to ) . ' is not a directory or does not exist.' );
@@ -735,7 +739,7 @@
 				for( $i = 0; $i < $this->Files_valid; $i++ ) {
 					if ( in_array( $this->Files_valid[$i]['ext'], self::FTY_IMAGES_GD ) ) {
 						$savepath = ( !$to ) ? $this->Files_valid[$i]['path'] : $to . $this->Files_valid[$i]['savename'];
-						$image = self::create_image( $this->Files_valid[$i]['path'], $this->Files_valid[$i]['ext'], $size, $type );
+						$image = self::create_image( $this->Files_valid[$i]['path'], $this->Files_valid[$i]['ext'], $size, $type, $allowGrowth );
 						self::save_image( $image, $savepath, $this->Files_valid[$i]['ext'], $prefix );
 					}
 				}
@@ -747,7 +751,7 @@
 				$ext = substr( strrchr( $filename, '.' ), 1 );
 				if ( in_array( $ext, self::FTY_IMAGES_GD ) ) {
 					$savepath = ( !$to ) ? $filename : $to . substr( $filename, strrpos( $filename, '/' )+1 );
-					$image = self::create_image( $filename, $ext, $size, $type );
+					$image = self::create_image( $filename, $ext, $size, $type, $allowGrowth );
 					self::save_image( $image, $savepath, $ext, $prefix );
 				}
 			}
@@ -762,7 +766,7 @@
 		 * @param string $prefix If not set the file will be overwritten (if the output is in the same folder)
 		 */
 		public function resize( $filename, $size, $to = null, $prefix = '' ) {
-			$this->thumb( $size, $to, $filename, '', $prefix );
+			$this->thumb( $size, $to, $filename, '', $prefix, true );
 		}
 		
 		/*
@@ -771,7 +775,7 @@
 		 * @param string $output_type The output file type (see @save_image() for which output types are supported)
 		 * @param boolean $keepOriginal whether to keep or delete the original file 
 		 */
-		public function convert( $filename, $output_type, $keepOriginal = false ) {
+		public function convert_image( $filename, $output_type, $keepOriginal = false ) {
 			if ( !file_exists( $filename ) ) {
 				throw new Exception( 'File does not exist (' . htmlspecialchars( $filename ) . ')' );
 			}
@@ -788,7 +792,7 @@
 		 * @param string $filecontent The raw image content
 		 * @return boolean False if the file does not exists else true
 		 */
-		public function fix_orientation( $filename, $filecontent = null ) {
+		public function fix_image_orientation( $filename, $filecontent = null ) {
 			if ( !file_exists( $filename ) ) {
 				return false;
 			}
@@ -813,7 +817,7 @@
 		 * Adds an watermark to the image
 		 * @param string $target Path to the target image
 		 * @param string $watermark Path to the watermark image
-		 * @param float $opacity The watermark's opacity From 0 (fully transparent) to 1 (fully visible)
+		 * @param float $opacity The watermark's opacity From 0.00 (fully transparent) to 1.00 (fully visible)
 		 * @param string $position The watermark's position
 		 * @param integer $offsetX Horizontal offset
 		 * @param integer $offsetY Vertical offset
@@ -826,7 +830,7 @@
 			}
 			
 			// keep the opacity value in range
-			$opacity = (( $opacity < 0 ) ? 0 : (( $opacity > 1 ) ? 1 : $opacity )) * 100;
+			$opacity = (int) ((( $opacity < 0 ) ? 0 : (( $opacity > 1 ) ? 1 : $opacity )) * 100);
 			
 			$target_image = self::create_image( $target );
 			$target_width = imagesx( $target_image );
@@ -891,65 +895,16 @@
 		
 		/**
 		 * Generates the settings for the thumb used in imagecopyresampled() function
-		 * @param integer $width Orignial image width
-		 * @param integer $height Orignial image height
-		 * @param integer $size The destination size
-		 * @param string $type An image resource possible type
-		 * @return array | boolean
-		 * * false: if the destination size is bigger than the original
-		 * * array with the calculated destination 'width', 'height', 'x', 'y'
-		 */
-		private static function generate_thumbsettings( $width, $height, $size, $type = '' ) {
-			switch( $type ) {
-				case 'iso': {
-					if ( $width < $height ) {
-						if ( $size > $height ) {
-							return false;
-						}
-						$y = ( $height / 2 ) - ( $width / 2 );
-						$height = $width;
-					} else {
-						if ( $size > $width ) {
-							return false;
-						}
-						$x = ( $width / 2 ) - ( $height / 2 );
-						$width = $height;
-					}
-					$dst_width = $dst_height = $size;
-				} break;
-				default: {
-					if ( $width > $height ) {
-						if ( $size > $width ) {
-							return false;
-						}
-						$dst_width = $size;
-						$dst_height = round( $size / ($width / $height) );
-					} else {
-						if ( $size > $height ) {
-							return false;
-						}
-						$dst_height = $size;
-						$dst_width = round( $size / ($height / $width) );
-					}
-				}
-			}
-			return array(	'dst_width' => $dst_width,
-								'dst_height' => $dst_height,
-								'x' => $x ?? 0,
-								'y' => $y ?? 0	);
-		}
-		
-		/**
-		 * Generates the settings for the thumb used in imagecopyresampled() function
 		 * * NOTE: imagecreatefrombmp is only availible for PHP 7 >= 7.2.0
 		 * * NOTE: imagecreatefromwebp is only availible for PHP 5 >= 5.5.0, PHP 7
 		 * @param integer $width Orignial image width
 		 * @param integer $height Orignial image height
 		 * @param integer $size The destination size
 		 * @param string $type An image resource possible type
+		 * @param boolean $allowGrowth Whether or not to allow a bigger output image
 		 * @return resource An image resource
 		 */
-		private function create_image( $filename, $ext = null, $size = null, $type = null ) {
+		private function create_image( $filename, $ext = null, $size = null, $type = null, $allowGrowth = false ) {
 			// create an image resource from the original image
 			$ext = ( !$ext ) ? substr( strrchr( $filename, '.' ), 1 ) : $ext;
 			switch( $ext ) {
@@ -971,7 +926,7 @@
 				$image_height = imagesy( $image );
 				
 				// get the settings for the thumb image creation
-				$settings = self::generate_thumbsettings( $image_width, $image_height, $size, $type );
+				$settings = self::generate_thumbsettings( $image_width, $image_height, $size, $type, $allowGrowth );
 
 				// settings return false if the destination $size is bigger than the original image
 				if ( $settings ) {
@@ -1034,6 +989,57 @@
 			}
 			
 			imagedestroy( $image );
+		}
+		
+		/**
+		 * Generates the settings for the thumb used in imagecopyresampled() function
+		 * @param integer $width Orignial image width
+		 * @param integer $height Orignial image height
+		 * @param integer $size The destination size
+		 * @param string $type An image resource possible type
+		 * @param boolean $allowGrowth Whether or not to allow a bigger output image
+		 * @return array | boolean
+		 * * false: $allowGrowth = false AND the destination size is bigger than the original
+		 * * array with the calculated destination 'width', 'height', 'x', 'y'
+		 */
+		private static function generate_thumbsettings( $width, $height, $size, $type = '', $allowGrowth = false ) {
+			switch( $type ) {
+				case 'iso': {
+					if ( $width < $height ) {
+						if ( !$allowGrowth && $size > $height ) {
+							return false;
+						}
+						$y = ( $height / 2 ) - ( $width / 2 );
+						$height = $width;
+					} else {
+						if ( !$allowGrowth && $size > $width ) {
+							return false;
+						}
+						$x = ( $width / 2 ) - ( $height / 2 );
+						$width = $height;
+					}
+					$dst_width = $dst_height = $size;
+				} break;
+				default: {
+					if ( $width > $height ) {
+						if ( !$allowGrowth && $size > $width ) {
+							return false;
+						}
+						$dst_width = $size;
+						$dst_height = round( $size / ($width / $height) );
+					} else {
+						if ( !$allowGrowth && $size > $height ) {
+							return false;
+						}
+						$dst_height = $size;
+						$dst_width = round( $size / ($height / $width) );
+					}
+				}
+			}
+			return array(	'dst_width' => $dst_width,
+								'dst_height' => $dst_height,
+								'x' => $x ?? 0,
+								'y' => $y ?? 0	);
 		}
 		
 	}
