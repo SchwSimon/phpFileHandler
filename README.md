@@ -67,11 +67,11 @@ $phpFileHandler->save( '/Path/To/Save/' ); // Save all valid files with a new un
   Note: **$length** should be atleast set to **10** for multiple files in the same folder!
 
 ```php
-phpFileHandler::setMaxFileSize( int $size [, (bool) $isMB = true ] )
+phpFileHandler::setMaxFileSize( int $size [, bool $isMB = true ] )
 phpFileHandler::setAllowedFileTypes( array $types )
-phpFileHandler::setStrictFilecheck( (bool) $bool )
-phpFileHandler::setUniqFilenames( (bool) $bool )
-phpFileHandler::setUniqFilenameLength( (integer) $length = 12 )
+phpFileHandler::setStrictFilecheck( bool $bool )
+phpFileHandler::setUniqFilenames( bool $bool )
+phpFileHandler::setUniqFilenameLength( integer $length = 12 )
 ```
 
 ### Adding & Save files
@@ -122,8 +122,8 @@ A file data element looks like this:
 
 ```php
 phpFileHandler::add_uploaded_files()
-phpFileHandler::add_file_from_url( (string) $url )
-phpFileHandler::add_existing_files( (mixed) $filenames )
+phpFileHandler::add_file_from_url( string $url )
+phpFileHandler::add_existing_files( mixed $filenames )
 
 phpFileHandler::save( (string) $to [, (bool) $allow_dir_create = false [, (int) $file_index = null [, (string) $name = null ]]] )
 ```
@@ -142,35 +142,37 @@ Note: *bmp* is just supported in PHP 7 >= 7.2.0
   
 
 ```php
-phpFileHandler::thumb( (int) $size [, (string) $filename = null [, (string) $type = '' [, (string) $prefix = '_thumb' ]]] )
-phpFileHandler::resize( (string) $filename, (int) $size [, (string) $to = null [, (string) $prefix = '' ]] )
-phpFileHandler::convert( (string) $filename, (string) $output_type [, (bool) $keepOriginal = false ] )
-phpFileHandler::fix_orientation( (string) $filename [, (string) $bytestream = null ] )
-phpFileHandler::put_watermark( (string) $target, (string) $watermark [, (float) $opacity = 0.5 [, (string) $position = 'center' [, (int) $offsetX = 0 [, (int) $offsetY = 0 ]]]] )
+phpFileHandler::thumb( int) $size [, string $filename = null [, string $type = '' [, string $prefix = '_thumb' ]]] )
+phpFileHandler::resize( string $filename, int $size [, string $to = null [, string $prefix = '' ]] )
+phpFileHandler::convert( string $filename, string $output_type [, bool $keepOriginal = false ] )
+phpFileHandler::fix_orientation( string $filename [, string $filecontent = null ] )
+phpFileHandler::put_watermark( string $target, string $watermark [, float $opacity = 0.5 [, string $position = 'center' [, int $offsetX = 0 [, int $offsetY = 0 ]]]] )
 ```
 
 ### static utility functions
 
 ```php
-phpFileHandler::uniqString( (int) $length = 12 )
-phpFileHandler::move_file( (string) $filename, (string) $to [, (bool) $allow_dir_create = false [, (bool) $copy = false [, (bool) $allow_override = false ]]] )
-phpFileHandler::guess_fileextension( [ (string) $filename = null [, (string) $bytestream = null ]] )
-phpFileHandler::is_jpg( [ (string) $filename = null [, (array) $hexArr = null ]] )
-phpFileHandler::is_gif( [ (string) $filename = null [, (array) $hexArr = null ]] )
-phpFileHandler::is_png( [ (string) $filename = null [, (array) $hexArr = null ]] )
-phpFileHandler::is_bmp( [ (string) $filename = null [, (array) $hexArr = null ]] )
-phpFileHandler::is_webp( [ (string) $filename = null [, (array) $hexArr = null ]] )
-phpFileHandler::is_webm( [ (string) $filename = null [, (array) $hexArr = null ]] )
-phpFileHandler::is_gzip( [ (string) $filename = null [, (array) $hexArr = null ]] )
-phpFileHandler::is_7zip( [ (string) $filename = null [, (array) $hexArr = null ]] )
-phpFileHandler::is_rar( [ (string) $filename = null [, (array) $hexArr = null ]] )
-phpFileHandler::is_tiff( [ (string) $filename = null [, (array) $hexArr = null ]] )
-phpFileHandler::is_pdf( [ (string) $filename = null [, (array) $hexArr = null ]] )
-phpFileHandler::is_wav( [ (string) $filename = null [, (array) $hexArr = null ]] )
-phpFileHandler::is_avi( [ (string) $filename = null [, (array) $hexArr = null ]] )
-phpFileHandler::is_tar( [ (string) $filename = null [, (array) $hexArr = null ]] )
-phpFileHandler::is_xml( [ (string) $filename = null [, (array) $hexArr = null ]] )
-phpFileHandler::is_mp3( [ (string) $filename = null [, (array) $hexArr = null ]] )
-phpFileHandler::is_wmv( [ (string) $filename = null [, (array) $hexArr = null ]] )
-phpFileHandler::is_wma( [ (string) $filename = null [, (array) $hexArr = null ]] )
+phpFileHandler::uniqString( int $length = 12 )
+phpFileHandler::move_file( string $filename, string $to [, bool $allow_dir_create = false [, bool $copy = false [, bool $allow_override = false ]]] )
+phpFileHandler::guess_fileextension( [ string $filename = null [, string $filecontent = null ]] )
+phpFileHandler::getFileSignature( string $filecontent [, int $index = 0 [, int $count = 4 ]] )
+phpFileHandler::compareFileSignature( array $comparison [, array $signature = null [, string $filename = null [, int $index = 0 ]]] )
+phpFileHandler::is_jpg( [ string $filename = null [, array $signature = null ]] )
+phpFileHandler::is_gif( [ string $filename = null [, array $signature = null ]] )
+phpFileHandler::is_png( [ string $filename = null [, array $signature = null ]] )
+phpFileHandler::is_bmp( [ string $filename = null [, array $signature = null ]] )
+phpFileHandler::is_webp( [ string $filename = null [, array $signature = null ]] )
+phpFileHandler::is_webm( [ string $filename = null [, array $signature = null ]] )
+phpFileHandler::is_gzip( [ string $filename = null [, array $signature = null ]] )
+phpFileHandler::is_7zip( [ string $filename = null [, array $signature = null ]] )
+phpFileHandler::is_rar( [ string $filename = null [, array $signature = null ]] )
+phpFileHandler::is_tif( [ string $filename = null [, array $signature = null ]] )
+phpFileHandler::is_pdf( [ string $filename = null [, array $signature = null ]] )
+phpFileHandler::is_wav( [ string $filename = null [, array $signature = null ]] )
+phpFileHandler::is_avi( [ string $filename = null [, array $signature = null ]] )
+phpFileHandler::is_tar( [ string $filename = null [, array $signature = null ]] )
+phpFileHandler::is_xml( [ string $filename = null [, array $signature = null ]] )
+phpFileHandler::is_mp3( [ string $filename = null [, array $signature = null ]] )
+phpFileHandler::is_wmv( [ string $filename = null [, array $signature = null ]] )
+phpFileHandler::is_wma( [ string $filename = null [, array $signature = null ]] )
 ```
