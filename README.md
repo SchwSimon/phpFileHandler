@@ -8,7 +8,7 @@ All in one PHP file handling class
 - Secure file handling, wherever the possibility exists to overwrite another file the default behaviour is not todo so  
 - Secure folder deletion & emptying
 - Include the most common image handling features like thumb creation, resizing etc.
-
+- Automatically adjusts the image oritentation when adding image files
 
 ## Dependencies
 
