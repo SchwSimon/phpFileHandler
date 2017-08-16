@@ -48,7 +48,7 @@ $phpFileHandler->save( '/Path/To/Save/' ); // Save all valid files with a new un
 
 ### Configuration
 
-- **_setMaxFileSize()_**  
+- **_setMaxFileSize( int $size [, bool $isMB = true ] )_**  
 > Set a file size limit (in megabyte format), if not set there is no limit (note to adjust 'upload_max_filesize' & 'post_max_size' in php.ini)  
 > If **$isMB** set to false, **$size** can be passed in byte format  
 	
@@ -172,7 +172,7 @@ Note:
 > *$position* 'center'(_default_), 'top', 'left', 'right', 'bottom', 'top left', 'top right', 'bottom left', 'bottom right'
 
 ```php
-$phpFileHandler->thumb( int) $size [, string $type = '' [, string $prefix = '_thumb' [, bool $allowGrowth = false [, string $to = null [, string $filename = null ]]]]] )
+$phpFileHandler->thumb( int $size [, string $type = '' [, string $prefix = '_thumb' [, bool $allowGrowth = false [, string $to = null [, string $filename = null ]]]]] )
 $phpFileHandler->resize( string $filename, int $size [, string $to = null [, string $prefix = '' ]] )
 $phpFileHandler->convert_image( string $filename, string $output_type [, bool $keepOriginal = false ] )
 $phpFileHandler->fix_image_orientation( string $filename [, string $filecontent = null ] )
