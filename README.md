@@ -48,7 +48,10 @@ $phpFileHandler->save( '/Path/To/Save/' ); // Save all valid files with a new un
 
 ### Configuration
 
-- **_setMaxFileSize_** ` ( int $size [, bool $isMB = true ] ) `{.php}
+- **_setMaxFileSize()_**
+```php
+$phpFileHandler->setMaxFileSize( int $size [, bool $isMB = true ] );
+```
 > Set a file size limit (in megabyte format), if not set there is no limit (note to adjust 'upload_max_filesize' & 'post_max_size' in php.ini)  
 > If **$isMB** set to false, **$size** can be passed in byte format  
 	
