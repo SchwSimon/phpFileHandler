@@ -106,12 +106,12 @@ A file data element key list example (from a valid & saved file):
 ```php
 array(
   "path" => 'C:/Apache24/htdocs/data/temp/8dsfsa98df6.jpg', // the full filepath
-  "origname" => 'Origin$alF &il eName.jpg',     // original filename, for files from an web url this is the web url
-  "name" => 'OriginalFileName',       // for uploaded files name will be a **stripped** version of "origname", for files from a web url "name" will be the last url part ('https://flushmodules.com/css/visuals/fm-icons.png' -> 'fm-icons.png' )
+  "origname" => 'Origin$alF &il eName.jpg',                 // original filename, for files from an web url this is the web url
+  "name" => 'OriginalFileName',                             // for uploaded files name will be a **stripped** version of "origname", for files from a web url "name" will be the last url part ('https://flushmodules.com/css/visuals/fm-icons.png' -> 'fm-icons.png' )
   "savename" => 'OriginalFileName.jpg',
-  "isnew" => true,        // only false when file was added via phpFileHandler::add_existing_files()
-  "size" => 600000,       // in bytes
-  "error" => '',        // the error message for invalid files
+  "isnew" => true,                                          // only false when file was added via phpFileHandler::add_existing_files()
+  "size" => 600000,                                         // in bytes
+  "error" => '',                                            // the error message for invalid files
   "isvalid" => true,
   "ext" => 'jpg'
 )
