@@ -103,8 +103,15 @@ The adding process add an file data element for each file into:
 - **$phpFileHandler->Files_valid_count**  
 - **$phpFileHandler->Files_invalid**	// files which have failed at least one sanity check  
 - **$phpFileHandler->Files_invalid_count**  
-- **$phpFileHandler->Files**		// All added files ( valid & invalid )  
-- **$phpFileHandler->Files_count**  
+- **$phpFileHandler->Files_ready**	// files which are ready for further usage
+- **$phpFileHandler->Files_ready_count**  
+
+You can easy iterate over the files
+```php
+for( $i = 0; $i < $phpFileHandler->Files_ready_count; $i++ ) {
+	// $phpFileHandler->Files_ready[$i]
+}
+```
 
 A file data element key list example (from a valid & saved file):
 > Note that for invalid files not all of these are set!
