@@ -126,8 +126,9 @@ array(
 
 - **_add_uploaded_files()_**  
 > Adds all files found in the superglobal $_FILES (upload via html form or ajax)  
+> You can also set one or multiple keys (array when multiple) for strictly just adding uploaded files from these keys
 ```php
-$phpFileHandler->add_uploaded_files()
+$phpFileHandler->add_uploaded_files( [ mixed $keys = null ] )
 ```
 
 - **_add_file_from_url()_**  
