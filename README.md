@@ -119,7 +119,8 @@ array(
   'error' => '',                                            // the error message for invalid files
   'errorCode' => null,                                      // see phpFileHandler::add_invalid_file() for the error codes
   'isvalid' => true,
-  'ext' => 'jpg'
+  'ext' => 'jpg',
+  'issaved' => true
 )
 ```
 
@@ -193,7 +194,7 @@ $phpFileHandler->convert_image( string $filename, string $output_type [, bool $k
 ```
 
 - **_fix_image_orientation()_**  
-> Trys to fix the image's orientation
+> Trys to fix the image's orientation (jpg/jpeg only!)
 ```php
 $phpFileHandler->fix_image_orientation( string $filename [, string $filecontent = null ] )
 ```
