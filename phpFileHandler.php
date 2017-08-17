@@ -217,13 +217,18 @@
 		
 		/**
 		 * Adds all files from the PHP superglobal $_FILES
+		 * @param array | string $keys Only files within these keys will be added
 		 */
-		public function add_uploaded_files() {
+		public function add_uploaded_files( $keys = null ) {
 			if ( $this->is_add_uploaded ) {
 				return;
 			}
+			$keys = ( $keys ) ? (array)$keys : null;
 			$this->is_add_uploaded = true;
 			foreach( $_FILES as $key => $data ) {
+				if ( $keys && !in_array( $key, $keys ) ) {
+					continue;
+				}
 				$data['tmp_name'] = (array)$data['tmp_name'];
 				$data['name'] = (array)$data['name'];
 				$data['error'] = (array)$data['error'];
