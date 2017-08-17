@@ -47,6 +47,8 @@ $phpFileHandler = new phpFileHandler;  // create phpFileHandler object
 $phpFileHandler->add_uploaded_files();  // Add all uploaded files from the $_FILES superglobal 
 $phpFileHandler->save( '/Path/To/Save/' ); // Save all valid files with a new unique name (12 characters long) to the given location 
 
+$phpFileHandler->thumb( 150, 'iso', '-150x150' ); // Optional thumb creation for images
+
 ```
 
 ## Documentation
