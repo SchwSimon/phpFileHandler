@@ -68,11 +68,11 @@
 		
 		/**
 		 * File packs
-		 * @var array $Files All added files
-		 * @var array $Files_valid The valid sanitized files ready for further phpFileHandler usage
-		 * @var array $Files_invalid The invalid files which could not passed the sanitize checks
+		 * @var array $Files_ready Files on the server ready for further usage
+		 * @var array $Files_valid Valid sanitized files
+		 * @var array $Files_invalid Invalid files which could not pass the checks
 		 */
-		public $Files = array();
+		public $Files_ready = array();
 		public $Files_valid = array();
 		public $Files_invalid = array();
 		
@@ -82,7 +82,7 @@
 		 * @var integer $Files_valid_count valid file count
 		 * @var integer $Files_invalid_count invalid file count
 		 */
-		public $Files_count = 0;
+		public $Files_ready_count = 0;
 		public $Files_valid_count = 0;
 		public $Files_invalid_count = 0;
 		
@@ -100,7 +100,7 @@
 																		'error' => '',
 																		'errorCode' => null,
 																		'isvalid' => false,
-																		'ext' => null,
+																		'ext' => '',
 																		'issaved' => false	);
 		
 		/**
@@ -120,12 +120,14 @@
 		 * @var integer ERR_FILE_UPLOAD_SIZE file exceeding the maximum filesize limit
 		 * @var integer ERR_FILE_TYPE filetype is not allowed
 		 * @var integer ERR_FILE_URL_READ could not reach or read the file from the URL location
-		 * @var integer ERR_FILE_NOTEXIST file does not exist
+		 * @var integer ERR_FILE_EMPTY file is empty or invalid
+		 * @var integer ERR_FILE_SAVE file could not be saved
 		 */
 		const ERR_FILE_UPLOAD_SIZE = 0;
 		const ERR_FILE_TYPE = 1;
 		const ERR_FILE_URL_READ = 2;
-		const ERR_FILE_NOTEXIST = 3;
+		const ERR_FILE_EMPTY = 3;
+		const ERR_FILE_SAVE = 4;
 		
 		/**
 		 * Constructor
@@ -233,6 +235,7 @@
 				$data['tmp_name'] = (array)$data['tmp_name'];
 				$data['name'] = (array)$data['name'];
 				$data['error'] = (array)$data['error'];
+				$data['type'] = (array)$data['type'];
 				for( $i = 0, $count = count( $data['tmp_name'] ); $i < $count; $i++ ) {
 					
 					$file = self::FILE_OBJECT_TEMPLATE;
@@ -240,7 +243,7 @@
 					$file['origname'] = $data['name'][$i];
 					$file['name'] = self::strip_to_valid_filename( $data['name'][$i] );
 					$file['uploadKey'] = $key;
-					$file['mime'] =  $data['type'][$i];
+					$file['mime'] = $data['type'][$i];
 					
 					// php.ini -> 'upload_max_filesize' exceeded error
 					if ( $data['error'][$i] === UPLOAD_ERR_INI_SIZE ) {
@@ -264,6 +267,7 @@
 			$file['path'] = $url;
 			$file['origname'] = $url;
 			$file['name'] = self::strip_to_valid_filename( substr( strrchr( $url, '/' ), 1 ) );
+			$file['isurl'] = true;
 			
 			$this->process_file_add( $file, true );
 		}
@@ -275,11 +279,11 @@
 		public function add_existing_files( $filenames ) {
 			$filenames = (array)$filenames;
 			for( $i = 0, $count = count( $filenames ); $i < $count; $i++ ) {
+				$file = self::FILE_OBJECT_TEMPLATE;
 				if ( is_file( $filenames[$i] ) ) {
 					$pathinfo = pathinfo( $filenames[$i] );
 					
-					$file = self::FILE_OBJECT_TEMPLATE;
-					$file['path'] = $filenames[$i];
+					$file['path'] = realpath( $filenames[$i] );
 					$file['origname'] = $pathinfo['basename'];
 					$file['name'] = $pathinfo['basename'];
 					$file['savename'] = $pathinfo['basename'] . '.' . $pathinfo['extension'];
@@ -288,7 +292,8 @@
 					
 					$this->process_file_add( $file );
 				} else {
-					$this->add_invalid_file( array( 'path' => $filenames[$i] ), self::ERR_FILE_NOTEXIST ); 
+					$file['path'] = $filenames[$i];
+					$this->add_invalid_file( $file, self::ERR_FILE_EMPTY ); 
 				}
 			}
 		}
@@ -303,10 +308,10 @@
 			$filecontent = self::getFileContents( $file['path'], $isUrl );
 			
 			if ( $filecontent === false || empty( $filecontent ) ) {
-				return $this->add_invalid_file( $file, ( $isUrl ) ? self::ERR_FILE_URL_READ : self::ERR_FILE_NOTEXIST ); 
+				return $this->add_invalid_file( $file, ( $isUrl ) ? self::ERR_FILE_URL_READ : self::ERR_FILE_EMPTY ); 
 			}
 			
-			if ( !isset( $file['ext'] ) || empty( $file['ext'] ) ) {
+			if ( empty( $file['ext'] ) ) {
 				// guess the file extension
 				$file['ext'] = self::guess_fileextension( null, $filecontent );
 				if ( !$file['ext'] ) {
@@ -333,7 +338,7 @@
 			if ( $this->AllowedFileTypes ) {
 				// check if the extension is allowed
 				if ( !in_array( $file['ext'], $this->AllowedFileTypes ) ) {
-					return $this->add_invalid_file( $file['ext'], self::ERR_FILE_TYPE ); 
+					return $this->add_invalid_file( $file, self::ERR_FILE_TYPE );
 				}
 			}
 			
@@ -353,7 +358,12 @@
 			}
 			
 			$file['size'] = $filesize;
-			$this->add_valid_file( $file );
+			if ( $file['isnew'] ) {
+				$this->add_valid_file( $file );
+			} else {
+				// existing file on server
+				$this->add_ready_file( $file );
+			}
 		}
 		
 		/**
@@ -362,7 +372,10 @@
 		 * @param boolean $allow_dir_create True to allow phpFileHandler to create the save path if not existing (recursive)
 		 * @param integer $file_index Index of an phpFileHandler->Files_valid file
 		 * @param string $name A custom filename when saving a single file
-		 * @return boolean | null True on success, false on failure OR null when passing an undefined *array index*
+		 * @return boolean | null Only when passing a $file_index
+		 * * True on success
+		 * * False on failure
+		 * * Null when $file_index is an undefined array index of $Files_valid
 		 */
 		public function save( $to, $allow_dir_create = false, $file_index = null, $name = null ) {
 			$to = self::prepare_path_string( $to, true );
@@ -373,11 +386,19 @@
 					$name = ( $this->is_uniq_filenames ) ? self::uniqString( $this->uniq_string_length ) : $this->Files_valid[$i]['name'];
 					$savename = $name . '.' . $this->Files_valid[$i]['ext'];
 					$new_path = $to . $savename;
-					self::move_file( $this->Files_valid[$i]['path'], $new_path, $allow_dir_create );
-					$this->Files_valid[$i]['name'] = $name;
-					$this->Files_valid[$i]['savename'] = $savename;
-					$this->Files_valid[$i]['path'] = $new_path;
-					$this->Files_valid[$i]['issaved'] = true;
+					if ( !$this->Files_valid[$i]['issaved'] ) {
+						if ( is_uploaded_file( $this->Files_valid[$i]['path'] ) ) {
+							move_uploaded_file( $this->Files_valid[$i]['path'], $new_path );
+						} else {
+							rename( $this->Files_valid[$i]['path'], $new_path );
+						}
+						$this->Files_valid[$i]['name'] = $name;
+						$this->Files_valid[$i]['savename'] = $savename;
+						$this->Files_valid[$i]['path'] = $new_path;
+						$this->add_ready_file( $this->Files_valid[$i] );
+					} else {
+						$this->add_invalid_file( $this->Files_valid[$i], self::ERR_FILE_SAVE ); 
+					}
 				}
 			} else {
 				if ( isset( $this->Files_valid[ $file_index ] ) ) {
@@ -391,11 +412,19 @@
 					}
 					$savename = $name . '.' . $this->Files_valid[ $file_index ]['ext'];
 					$new_path = $to . $savename;
-					self::move_file( $file['path'], $new_path, $allow_dir_create );
-					$this->Files_valid[ $file_index ]['name'] = $name;
-					$this->Files_valid[ $file_index ]['savename'] = $savename;
-					$this->Files_valid[ $file_index ]['path'] = $new_path;
-					$this->Files_valid[ $file_index ]['issaved'] = true;
+					if ( !$this->Files_valid[ $file_index ]['issaved'] ) {
+						if ( is_uploaded_file( $this->Files_valid[ $file_index ]['path'] ) ) {
+							move_uploaded_file( $this->Files_valid[ $file_index ]['path'], $new_path );
+						} else {
+							rename( $this->Files_valid[$i]['path'], $new_path );
+						}
+						$this->Files_valid[ $file_index ]['name'] = $name;
+						$this->Files_valid[ $file_index ]['savename'] = $savename;
+						$this->Files_valid[ $file_index ]['path'] = $new_path;
+						$this->add_ready_file( $this->Files_valid[ $file_index ] );
+					} else {
+						$this->add_invalid_file( $this->Files_valid[ $file_index ], self::ERR_FILE_SAVE ); 
+					}
 				} else {
 					return null;
 				}
@@ -414,19 +443,14 @@
 				case self::ERR_FILE_UPLOAD_SIZE: { $errorMsg = 'Exceeding the maximum upload file size. '; } break;
 				case self::ERR_FILE_TYPE: { $errorMsg = 'Filetype not allowed.'; } break;
 				case self::ERR_FILE_URL_READ: { $errorMsg = 'Could not fetch the file from the web address.'; } break;
-				case self::ERR_FILE_NOTEXIST: { $errorMsg = 'This file does not exist (anymore?) or is empty.'; } break;
+				case self::ERR_FILE_EMPTY: { $errorMsg = 'Empty or invalid file.'; } break;
+				case self::ERR_FILE_SAVE: { $errorMsg = 'Could not save the file.'; } break;
 			}
 			$file['errorCode'] = $errorCode;
 			$file['error'] = $errorMsg;
 			
 			$this->Files_invalid[] = $file;
 			$this->Files_invalid_count++;
-			$this->add_file( $file );
-			
-			// delete the file if it is a new one
-			if ( $file['isnew'] ) {
-				unlink( $file['path'] );
-			}
 		}
 		
 		/**
@@ -439,16 +463,18 @@
 			
 			$this->Files_valid[] = $file;
 			$this->Files_valid_count++;
-			$this->add_file( $file );
 		}
 		
 		/**
-		 * Adds an added file regardless of whether valid or invalid to $Files
+		 * Adds a ready file to $Files_ready
 		 * @param array $file
 		 */
-		protected function add_file( $file ) {
-			$this->Files[] = $file;
-			$this->Files_count++;
+		protected function add_ready_file( $file ) {
+			$file['isvalid'] = true;
+			$file['issaved'] = true;
+			
+			$this->Files_ready[] = $file;
+			$this->Files_ready_count++;
 		}
 		
 		/**
@@ -461,7 +487,7 @@
 		 * @return boolean True on success, False on failure
 		 */
 		public static function move_file( $filename, $to, $allow_dir_create = false, $allow_override = false, $copy = false ) {
-			if ( !is_file( $filename ) ) {
+			if ( !is_file( $filename ) || !is_dir( $to ) ) {
 				return false;
 			}
 			
@@ -479,13 +505,7 @@
 			if ( $copy ) {
 				return copy( $filename, $dest_dir );
 			} else {
-				if ( is_uploaded_file( $filename ) ) {
-					// for in this session uploaded files only
-					return move_uploaded_file( $filename, $dest_dir );
-				} else {
-					// every other files
-					return rename( $filename, $dest_file );
-				}
+				return rename( $filename, $dest_file );
 			}
 		}
 		
@@ -550,6 +570,8 @@
 					if ( !mkdir( $dir, 0777, true ) ) {
 						throw new Exception( 'Unable to create folder, check the parent folder\'s permissions it must be writable for the system user which executes PHP.' );
 					}
+					// ensure file mode
+					chmod( $dir, 0777 );
 				} else {
 					throw new Exception( '"' . htmlspecialchars( $dir ) . '" path does not exist, set @param $allow_dir_create to TRUE to allow path creation.' );
 				}
@@ -754,23 +776,26 @@
 		
 		/**
 		 * Strips all characters except from the folowing: 'a-z'  'A-Z'  '0-9'  '_'  '-'  '.'
+		 * and shortens the string to a maximum of 100 characters
+		 * If the string is not utf-8 encoded a random string will get returned!
 		 * @param string $string
-		 * @return string The stripped string
+		 * @return string A valid utf-8 string
 		 */
 		private static function strip_to_valid_filename( $string ) {
-			return preg_replace( '/[^\w-.]/', '', $string );
+			if ( !mb_detect_encoding( $string, 'UTF-8', true ) ) {
+				return self::uniqString( 12 );
+			}
+			$string = preg_replace( '/[^\w-.]/', '', $string );
+			return substr( $string, 0, 100 );
 		}
 		
 		/**
-		 * Returns a proper and absolute path string with a leading '/' for directory paths
+		 * Filters a path string for proper usage in this class
 		 * @param string $dir
-		 * @return string The proper directory string
-		 * * '\' -> '/'
-		 * * 'Dir\Path\Here' -> 'C:/Dir/Path/Here/'	(on windows: 'C:\Dir\Path\Here/' )
-		 * * 'Dir\Path\Here/img.jpg' -> 'C:/Dir/Path/Here/img.jpg'	(on windows: 'C:\Dir\Path\Here\img.jpg' )
+		 * @return string A proper path string with a leading '/' for directory paths
 		 */
 		private static function prepare_path_string( $path, $forceDir = false ) {
-			$path = realpath( trim( str_replace( '\\', '/', $path ), '/' ) );
+			$path = trim( str_replace( '\\', '/', $path ), '/' );
 			if ( is_file( $path ) ) {
 				if ( $forceDir ) {
 					$path = dirname( $path ) . '/';
@@ -1004,8 +1029,8 @@
 				case 'xbm': { $image = imagecreatefromxbm( $filename ); } break;
 				default: throw new Exception( 'GD extension cannot create an image from this image type ("' . htmlspecialchars( $ext ) . '")' ); 
 			}
-			
-			if ( $size && $type ) {
+
+			if ( $size && $type !== null ) {
 				$image_width = imagesx( $image );
 				$image_height = imagesy( $image );
 				
@@ -1028,7 +1053,7 @@
 						0, 0,																//	dst_x,			dst_y,
 						$settings['x'], $settings['y'],								//	src_x,			src_y,
 						$settings['dst_width'], $settings['dst_height'],	//	dst_w,			dst_h,
-						$image_width, $image_height							//	src_w,			src_h
+						$settings['src_width'], $settings['src_height']		//	src_w,			src_h
 					);
 					
 					imagedestroy( $image );
@@ -1077,8 +1102,8 @@
 		
 		/**
 		 * Generates the settings for the thumb used in imagecopyresampled() function
-		 * @param integer $width Orignial image width
-		 * @param integer $height Orignial image height
+		 * @param integer $src_width Orignial image width
+		 * @param integer $src_height Orignial image height
 		 * @param integer $size The destination size
 		 * @param string $type An image resource possible type
 		 * @param boolean $allowGrowth Whether or not to allow a bigger output image
@@ -1086,42 +1111,44 @@
 		 * * false: $allowGrowth = false AND the destination size is bigger than the original
 		 * * array with the calculated destination 'width', 'height', 'x', 'y'
 		 */
-		private static function generate_thumbsettings( $width, $height, $size, $type = '', $allowGrowth = false ) {
+		private static function generate_thumbsettings( $src_width, $src_height, $size, $type = '', $allowGrowth = false ) {
 			switch( $type ) {
 				case 'iso': {
-					if ( $width < $height ) {
-						if ( !$allowGrowth && $size > $height ) {
+					if ( $src_width < $src_height ) {
+						if ( !$allowGrowth && $size > $src_height ) {
 							return false;
 						}
-						$y = ( $height / 2 ) - ( $width / 2 );
-						$height = $width;
+						$y = ( $src_height / 2 ) - ( $src_width / 2 );
+						$src_height = $src_width;
 					} else {
-						if ( !$allowGrowth && $size > $width ) {
+						if ( !$allowGrowth && $size > $src_width ) {
 							return false;
 						}
-						$x = ( $width / 2 ) - ( $height / 2 );
-						$width = $height;
+						$x = ( $src_width / 2 ) - ( $src_height / 2 );
+						$src_width = $src_height;
 					}
 					$dst_width = $dst_height = $size;
 				} break;
 				default: {
-					if ( $width > $height ) {
-						if ( !$allowGrowth && $size > $width ) {
+					if ( $src_width > $src_height ) {
+						if ( !$allowGrowth && $size > $src_width ) {
 							return false;
 						}
 						$dst_width = $size;
-						$dst_height = round( $size / ($width / $height) );
+						$dst_height = round( $size / ($src_width / $src_height) );
 					} else {
-						if ( !$allowGrowth && $size > $height ) {
+						if ( !$allowGrowth && $size > $src_height ) {
 							return false;
 						}
 						$dst_height = $size;
-						$dst_width = round( $size / ($height / $width) );
+						$dst_width = round( $size / ($src_height / $src_width) );
 					}
 				}
 			}
 			return array(	'dst_width' => $dst_width,
 								'dst_height' => $dst_height,
+								'src_width' => $src_width,
+								'src_height' => $src_height,
 								'x' => $x ?? 0,
 								'y' => $y ?? 0	);
 		}
