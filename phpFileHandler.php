@@ -299,6 +299,18 @@
 		}
 		
 		/**
+		 * Removes all added files
+		 */
+		public function remove_added_files() {
+			$this->Files_ready = array();
+			$this->Files_valid = array();
+			$this->Files_invalid = array();
+			$this->Files_ready_count = 0;
+			$this->Files_valid_count = 0;
+			$this->Files_invalid_count = 0;
+		}
+		
+		/**
 		 * Runs a file trough the main file checking process which is the only way to get valid files into @phpFileHandler->Files_valid
 		 * @param array $file A phpFileHandler $file array
 		 * @param boolean $isUrl True if $file['path'] is an web url
