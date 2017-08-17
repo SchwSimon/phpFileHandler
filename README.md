@@ -168,6 +168,12 @@ $phpFileHandler->add_existing_files( mixed $filenames )
 $phpFileHandler->save( string $to [, bool $allow_dir_create = false [, int $file_index = null [, string $name = null ]]] )
 ```
 
+- **_remove_added_files()_**  
+> Removes all added files
+```php
+$phpFileHandler->remove_added_files()
+```
+
 ### Image Handling / Manipulation
 
 Supported image file types for image Handling are:  
