@@ -94,6 +94,7 @@
 																		'orignam' => '',
 																		'name' => '',
 																		'savename' => '',
+																		'uploadKey' => null,
 																		'isnew' => true,
 																		'size' => 0,
 																		'error' => '',
@@ -238,6 +239,7 @@
 					$file['path'] = $data['tmp_name'][$i];
 					$file['origname'] = $data['name'][$i];
 					$file['name'] = self::strip_to_valid_filename( $data['name'][$i] );
+					$file['uploadKey'] = $key;
 					$file['mime'] =  $data['type'][$i];
 					
 					// php.ini -> 'upload_max_filesize' exceeded error
@@ -273,7 +275,7 @@
 		public function add_existing_files( $filenames ) {
 			$filenames = (array)$filenames;
 			for( $i = 0, $count = count( $filenames ); $i < $count; $i++ ) {
-				if ( file_exists( $filenames[$i] ) ) {
+				if ( is_file( $filenames[$i] ) ) {
 					$pathinfo = pathinfo( $filenames[$i] );
 					
 					$file = self::FILE_OBJECT_TEMPLATE;
@@ -306,7 +308,7 @@
 			
 			if ( !isset( $file['ext'] ) || empty( $file['ext'] ) ) {
 				// guess the file extension
-				$file['ext'] = guess_fileextension( null, $filecontent );
+				$file['ext'] = self::guess_fileextension( null, $filecontent );
 				if ( !$file['ext'] ) {
 					// if file extension could not be guessed and @is_strict_filetypes is set to true.. dont let the file pass
 					if ( $this->is_strict_filetypes && $file['isnew'] ) {
@@ -363,10 +365,10 @@
 		 * @return boolean | null True on success, false on failure OR null when passing an undefined *array index*
 		 */
 		public function save( $to, $allow_dir_create = false, $file_index = null, $name = null ) {
-			$to = self::prepare_dir_string( $to );
+			$to = self::prepare_path_string( $to, true );
 			self::try_create_folder( $to, $allow_dir_create );
 			if ( $file_index === null ) {
-				for( $i = 0; $i < $this->Files_valid; $i++ ) {
+				for( $i = 0; $i < $this->Files_valid_count; $i++ ) {
 					// generate a new filename or take the original
 					$name = ( $this->is_uniq_filenames ) ? self::uniqString( $this->uniq_string_length ) : $this->Files_valid[$i]['name'];
 					$savename = $name . '.' . $this->Files_valid[$i]['ext'];
@@ -451,27 +453,38 @@
 		
 		/**
 		 * Securely moves or copys a file to a new location
-		 * @param string $filename The full path to file
-		 * @param string $to Move to path
+		 * @param string $source Path to the source file. 
+		 * @param string $dest The destination path
 		 * @param boolean $allow_dir_create True to allow phpFileHandler to create the save path if not existing (recursive)
 		 * @param boolean $allow_override True to allow file override
 		 * @param boolean $copy True to copy the file to the given location
 		 * @return boolean True on success, False on failure
 		 */
 		public static function move_file( $filename, $to, $allow_dir_create = false, $allow_override = false, $copy = false ) {
-			if ( !$allow_override && file_exists( $filename ) ) {
+			if ( !is_file( $filename ) ) {
 				return false;
 			}
-			self::try_create_folder( $to, $allow_dir_create );
+			
+			// force an absolute folder destination path
+			$dest_dir = self::prepare_path_string( $to, true );
+			// get the absolute destination file path
+			$dest_file = $dest_dir . basename( $filename );
+			
+			if ( !$allow_override && is_file( $dest_file ) ) {
+				return false;
+			}
+			
+			self::try_create_folder( $dest_dir, $allow_dir_create );
+			
 			if ( $copy ) {
-				return copy( $filename, $to );
+				return copy( $filename, $dest_dir );
 			} else {
 				if ( is_uploaded_file( $filename ) ) {
 					// for in this session uploaded files only
-					return move_uploaded_file( $filename, $to );
+					return move_uploaded_file( $filename, $dest_dir );
 				} else {
 					// every other files
-					return rename( $filename, $to );
+					return rename( $filename, $dest_file );
 				}
 			}
 		}
@@ -568,7 +581,7 @@
 					return false;
 				}
 			} else {
-				if ( !file_exists( $filename ) ) {
+				if ( !is_file( $filename ) ) {
 					return false;
 				}
 				$filecontent = file_get_contents( $filename );
@@ -749,14 +762,23 @@
 		}
 		
 		/**
-		 * Returns a proper directory string with a leading '/'
+		 * Returns a proper and absolute path string with a leading '/' for directory paths
 		 * @param string $dir
 		 * @return string The proper directory string
 		 * * '\' -> '/'
-		 * * '/Dir\Path\Here' -> '/Dir/Path/Here/'
+		 * * 'Dir\Path\Here' -> 'C:/Dir/Path/Here/'	(on windows: 'C:\Dir\Path\Here/' )
+		 * * 'Dir\Path\Here/img.jpg' -> 'C:/Dir/Path/Here/img.jpg'	(on windows: 'C:\Dir\Path\Here\img.jpg' )
 		 */
-		private static function prepare_dir_string( $dir ) {
-			return rtrim( str_replace( '\\', '/', $dir ), '/' ) . '/';
+		private static function prepare_path_string( $path, $forceDir = false ) {
+			$path = realpath( trim( str_replace( '\\', '/', $path ), '/' ) );
+			if ( is_file( $path ) ) {
+				if ( $forceDir ) {
+					$path = dirname( $path ) . '/';
+				}
+			} else {
+				$path = $path . '/';
+			}
+			return $path;
 		}
 		
 	/******
@@ -791,14 +813,14 @@
 		 */
 		public function thumb( $size, $type = '', $prefix = '_thumb', $allowGrowth = false, $to = null, $filename = null ) {
 			if ( $to ) {
+				$to = self::prepare_path_string( $to, true );
 				if ( !is_dir( $to ) ) {
 					throw new Exception( htmlspecialchars( $to ) . ' is not a directory or does not exist.' );
 				}
-				$to = self::prepare_dir_string( $to );
 			}
 			if ( !$filename ) {
 				// generate a thumb for each of the phpFileHandler->Files_valid
-				for( $i = 0; $i < $this->Files_valid; $i++ ) {
+				for( $i = 0; $i < $this->Files_valid_count; $i++ ) {
 					if ( in_array( $this->Files_valid[$i]['ext'], self::FTY_IMAGES_GD ) ) {
 						$savepath = ( !$to ) ? $this->Files_valid[$i]['path'] : $to . $this->Files_valid[$i]['savename'];
 						$image = self::create_image( $this->Files_valid[$i]['path'], $this->Files_valid[$i]['ext'], $size, $type, $allowGrowth );
@@ -806,7 +828,7 @@
 					}
 				}
 			} else {
-				if ( !file_exists( $filename ) ) {
+				if ( !is_file( $filename ) ) {
 					throw new Exception( 'File does not exist (' . htmlspecialchars( $filename ) . ')' );
 				}
 				// generate a thumb for the given file if its an image file which can be handled by GD
@@ -838,7 +860,7 @@
 		 * @param boolean $keepOriginal whether to keep or delete the original file 
 		 */
 		public function convert_image( $filename, $output_type, $keepOriginal = false ) {
-			if ( !file_exists( $filename ) ) {
+			if ( !is_file( $filename ) ) {
 				throw new Exception( 'File does not exist (' . htmlspecialchars( $filename ) . ')' );
 			}
 			$image = self::create_image( $filename );
@@ -855,7 +877,7 @@
 		 * @return boolean False if the file does not exists else true
 		 */
 		public function fix_image_orientation( $filename, $filecontent = null ) {
-			if ( !file_exists( $filename ) || !self::is_jpg( $filename ) ) {
+			if ( !is_file( $filename ) || !self::is_jpg( $filename ) ) {
 				return false;
 			}
 			$data = exif_read_data( $filename );
@@ -885,9 +907,9 @@
 		 * @param integer $offsetY Vertical offset
 		 */
 		public function put_watermark( $target, $watermark, $opacity = 0.5, $position = 'center', $offsetX = 0, $offsetY = 0 ) {
-			if ( !file_exists( $target ) ) {
+			if ( !is_file( $target ) ) {
 				throw new Exception( 'Target file does not exist (' . htmlspecialchars( $target ) . ')' );
-			} else if ( !file_exists( $watermark )  ) {
+			} else if ( !is_file( $watermark )  ) {
 				throw new Exception( 'Watermark file does not exist (' . htmlspecialchars( $watermark ) . ')' );
 			}
 			
