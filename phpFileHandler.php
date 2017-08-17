@@ -87,6 +87,22 @@
 		public $Files_invalid_count = 0;
 		
 		/**
+		 * File array template
+		 * @var array FILE_OBJECT_TEMPLATE
+		 */
+		const FILE_OBJECT_TEMPLATE = array(	'path' => '',
+																		'orignam' => '',
+																		'name' => '',
+																		'savename' => '',
+																		'isnew' => true,
+																		'size' => 0,
+																		'error' => '',
+																		'errorCode' => null,
+																		'isvalid' => false,
+																		'ext' => null,
+																		'issaved' => false	);
+		
+		/**
 		 * Allowed file types presets
 		 * @var array FTY_IMAGES_COMMON typical for default image only uploads
 		 * @var array FTY_IMAGES_GD all types processable with the PHP GD extension
@@ -212,11 +228,12 @@
 				$data['name'] = (array)$data['name'];
 				$data['error'] = (array)$data['error'];
 				for( $i = 0, $count = count( $data['tmp_name'] ); $i < $count; $i++ ) {
-					$file = array(	'path'	=> $data['tmp_name'][$i],
-										'origname' => $data['name'][$i],
-										'name' => self::strip_to_valid_filename( $data['name'][$i] ),
-										'mime' => $data['type'][$i],
-										'isnew' => true	);
+					
+					$file = self::FILE_OBJECT_TEMPLATE;
+					$file['path'] = $data['tmp_name'][$i];
+					$file['origname'] = $data['name'][$i];
+					$file['name'] = self::strip_to_valid_filename( $data['name'][$i] );
+					$file['mime'] =  $data['type'][$i];
 					
 					// php.ini -> 'upload_max_filesize' exceeded error
 					if ( $data['error'][$i] === UPLOAD_ERR_INI_SIZE ) {
@@ -235,10 +252,12 @@
 		 */
 		public function add_file_from_url( $url ) {
 			$url = ( substr( $url, 0, 4 ) !== 'http' ) ? 'http://' . str_replace( '//', '', $url ) : $url;
-			$file = array(	'path'	=> $url,
-								'origname' => $url,
-								'name' => self::strip_to_valid_filename( substr( strrchr( $url, '/' ), 1 ) ),
-								'isnew' => true	);
+			
+			$file = self::FILE_OBJECT_TEMPLATE;
+			$file['path'] = $url;
+			$file['origname'] = $url;
+			$file['name'] = self::strip_to_valid_filename( substr( strrchr( $url, '/' ), 1 ) );
+			
 			$this->process_file_add( $file, true );
 		}
 		
@@ -251,12 +270,16 @@
 			for( $i = 0, $count = count( $filenames ); $i < $count; $i++ ) {
 				if ( file_exists( $filenames[$i] ) ) {
 					$pathinfo = pathinfo( $filenames[$i] );
-					$this->process_file_add( array(	'path'	=> $filenames[$i],
-																	'origname' => $pathinfo['basename'],
-																	'name' => $pathinfo['basename'],
-																	'savename' => $pathinfo['basename'] . '.' . $pathinfo['extension'],
-																	'isnew' => false,
-																	'ext' => $pathinfo['extension']	)	);
+					
+					$file = self::FILE_OBJECT_TEMPLATE;
+					$file['path'] = $filenames[$i];
+					$file['origname'] = $pathinfo['basename'];
+					$file['name'] = $pathinfo['basename'];
+					$file['savename'] = $pathinfo['basename'] . '.' . $pathinfo['extension'];
+					$file['isnew'] = false;
+					$file['ext'] = $pathinfo['extension'];
+					
+					$this->process_file_add( $file );
 				} else {
 					$this->add_invalid_file( array( 'path' => $filenames[$i] ), self::ERR_FILE_NOTEXIST ); 
 				}
@@ -301,16 +324,10 @@
 			}
 			
 			if ( $this->AllowedFileTypes ) {
-				
 				// check if the extension is allowed
 				if ( !in_array( $file['ext'], $this->AllowedFileTypes ) ) {
 					return $this->add_invalid_file( $file['ext'], self::ERR_FILE_TYPE ); 
 				}
-				
-				// if its a known media file make a hard filetype check
-				// if ( !self::check_mediafile( $filecontent, $file['ext'] ) ) {
-					// return $this->add_invalid_file( $file, self::ERR_FILE_TYPE ); 
-				// }
 			}
 			
 			// filter the filename and remove the extension
@@ -323,11 +340,9 @@
 				file_put_contents( $file['path'], $filecontent );
 			}
 			
-			if ( $this->is_gd2_ext ) {
-				// check the orientation for the common image types
-				if ( in_array( $file['ext'], self::FTY_IMAGES_GD ) ) {
-					$this->fix_image_orientation( $file['path'], $filecontent );
-				}
+			if ( $file['ext'] === 'jpg' && $this->is_gd2_ext ) {
+				// only jpg supported
+				$this->fix_image_orientation( $file['path'], $filecontent );
 			}
 			
 			$file['size'] = $filesize;
@@ -379,6 +394,54 @@
 				}
 			}
 			return true;
+		}
+		
+		/**
+		 * Adds an invalid file with its error to $Files_invalid
+		 * Secure for client output as error messge
+		 * @param array $file
+		 * @param integer $errorCode An error severity constant
+		 */
+		protected function add_invalid_file( $file, $errorCode ) {
+			switch( $errorCode ) {
+				case self::ERR_FILE_UPLOAD_SIZE: { $errorMsg = 'Exceeding the maximum upload file size. '; } break;
+				case self::ERR_FILE_TYPE: { $errorMsg = 'Filetype not allowed.'; } break;
+				case self::ERR_FILE_URL_READ: { $errorMsg = 'Could not fetch the file from the web address.'; } break;
+				case self::ERR_FILE_NOTEXIST: { $errorMsg = 'This file does not exist (anymore?) or is empty.'; } break;
+			}
+			$file['errorCode'] = $errorCode;
+			$file['error'] = $errorMsg;
+			
+			$this->Files_invalid[] = $file;
+			$this->Files_invalid_count++;
+			$this->add_file( $file );
+			
+			// delete the file if it is a new one
+			if ( $file['isnew'] ) {
+				unlink( $file['path'] );
+			}
+		}
+		
+		/**
+		 * Adds an valid file to $Files_valid
+		 * @param array $file
+		 */
+		protected function add_valid_file( $file ) {
+			$file['isvalid'] = true;
+			$file['name'] = ( empty( $file['name'] ) ) ? self::uniqString() : $file['name'];
+			
+			$this->Files_valid[] = $file;
+			$this->Files_valid_count++;
+			$this->add_file( $file );
+		}
+		
+		/**
+		 * Adds an added file regardless of whether valid or invalid to $Files
+		 * @param array $file
+		 */
+		protected function add_file( $file ) {
+			$this->Files[] = $file;
+			$this->Files_count++;
 		}
 		
 		/**
@@ -481,7 +544,7 @@
 		 * @return string | boolean The raw byte stream from the given file as string OR false if the file does not exist or the web url could not be reached
 		 */
 		protected static function getFileContents( $filename, $isUrl = false ) {
-			$isUrl = ( !$isUrl && filter_var( $url, FILTER_VALIDATE_URL ) ) ? true : $isUrl;
+			$isUrl = ( !$isUrl && filter_var( $filename, FILTER_VALIDATE_URL ) ) ? true : $isUrl;
 			if ( $isUrl ) {
 				// $filename is a web url
 				try {
@@ -690,59 +753,6 @@
 		private static function prepare_dir_string( $dir ) {
 			return rtrim( str_replace( '\\', '/', $dir ), '/' ) . '/';
 		}
-
-		/**
-		 * Adds an invalid file with its error to $Files_invalid
-		 * Secure for client output as error messge
-		 * @param array $file
-		 * @param integer $errorCode An error severity constant
-		 */
-		protected function add_invalid_file( $file, $errorCode ) {
-			switch( $errorCode ) {
-				case self::ERR_FILE_UPLOAD_SIZE: { $errorMsg = 'Exceeding the maximum upload file size. '; } break;
-				case self::ERR_FILE_TYPE: { $errorMsg = 'Filetype not allowed.'; } break;
-				case self::ERR_FILE_URL_READ: { $errorMsg = 'Could not fetch the file from the web address.'; } break;
-				case self::ERR_FILE_NOTEXIST: { $errorMsg = 'This file does not exist (anymore?) or is empty.'; } break;
-			}
-			$file['errorCode'] = $errorCode;
-			$file['error'] = $errorMsg;
-			$file['isvalid'] = false;
-			
-			$this->Files_invalid[] = $file;
-			$this->Files_invalid_count++;
-			$this->add_file( $file );
-			
-			// delete the file if it is a new one
-			if ( $file['isnew'] ) {
-				unlink( $file['path'] );
-			}
-		}
-		
-		/**
-		 * Adds an valid file to $Files_valid
-		 * @param array $file
-		 */
-		protected function add_valid_file( $file ) {
-			$file['errorCode'] = null;
-			$file['error'] = '';
-			$file['isvalid'] = true;
-			$file['name'] = ( empty( $file['name'] ) ) ? self::uniqString() : $file['name'];
-			$file['issaved'] = false;
-			$file['savename'] = $file['savename'] ?? null;
-			
-			$this->Files_valid[] = $file;
-			$this->Files_valid_count++;
-			$this->add_file( $file );
-		}
-		
-		/**
-		 * Adds an added file regardless of whether valid or invalid to $Files
-		 * @param array $file
-		 */
-		protected function add_file( $file ) {
-			$this->Files[] = $file;
-			$this->Files_count++;
-		}
 		
 	/******
 	 *			-------------------------------------------------------------
@@ -840,7 +850,7 @@
 		 * @return boolean False if the file does not exists else true
 		 */
 		public function fix_image_orientation( $filename, $filecontent = null ) {
-			if ( !file_exists( $filename ) ) {
+			if ( !file_exists( $filename ) || !self::is_jpg( $filename ) ) {
 				return false;
 			}
 			$data = exif_read_data( $filename );
@@ -854,7 +864,7 @@
 				if ( $newAngle ) {
 					$image = imagecreatefromstring( ( !$filecontent ) ? self::getFileContents( $filename ) : $filecontent );
 					$image = imagerotate( $image, $newAngle, 0 );
-					self::save_image( $image, $file['path'], $file['ext'] );
+					self::save_image( $image, $filename );
 				}
 			}
 			return true;
