@@ -1,5 +1,9 @@
 <?php
 	
+	if ( isset( $argv ) ) {
+		
+	}
+	
 	/***
 	 * phpFileHandler - All in one PHP file handling class
 	 */
@@ -15,9 +19,11 @@
 		 * Is ... extension loaded?
 		 * @var boolean $is_mbstring_ext Is the mbstring extension loaded?
 		 * @var boolean $is_gd2_ext Is the gd2 extension loaded?
+		 * @var boolean $is_allow_url_fopen Is 'allow_url_fopen' set to 'On' in php.ini ?
 		 */
 		public $is_mbstring_ext;
 		public $is_gd2_ext;
+		public $is_allow_url_fopen;
 		
 		/**
 		 * Got phpFileHandler->add_uploaded_files() called?
@@ -57,7 +63,7 @@
 		 * * See -> guess_fileextension() for which file signatures can be detected
 		 * @var boolean
 		 */
-		public $is_strict_filetypes = false;
+		public $is_strict_filecheck = false;
 		
 		/**
 		 * An error String containing information about non fatal errors like invalid file uploads
@@ -91,7 +97,8 @@
 		 * @var array FILE_OBJECT_TEMPLATE
 		 */
 		const FILE_OBJECT_TEMPLATE = array(	'path' => '',
-																		'orignam' => '',
+																		'dirname' => '',
+																		'origname' => '',
 																		'name' => '',
 																		'savename' => '',
 																		'uploadKey' => null,
@@ -136,6 +143,8 @@
 			// check if the mbstring extension is loaded
 			$this->is_mbstring_ext = extension_loaded( 'mbstring' );
 			$this->is_gd2_ext = extension_loaded( 'gd2' );
+			$allow_url_fopen = ini_get( 'allow_url_fopen' );
+			$this->is_allow_url_fopen = ( $allow_url_fopen == '1' || strtolower( $allow_url_fopen ) == 'on' ) ? true : false;
 		}
 		
 		/**
@@ -146,7 +155,7 @@
 		public function setMaxFileSize( $size, $isMB = true ) {
 			$size = ( $size < 0 ) ? 0 : $size;
 			// convert to byte if $isMB = true
-			$this->MaxFileSize = ( $isMB ) ? $size * 100000 : $size;
+			$this->MaxFileSize = ( $isMB ) ? $size * 1000000 : $size;
 		}
 		
 		/**
@@ -160,7 +169,7 @@
 			} else {
 				$types = (array)$types;
 				for( $i = 0, $count = count( $types ); $i < $count; $i++ ) {
-					$types[$i] = (string)$types;
+					$types[$i] = (string)$types[$i];
 				}
 				$this->AllowedFileTypes = $types;
 			}
@@ -171,7 +180,7 @@
 		 * @param boolean $bool
 		 */
 		public function setStrictFilecheck( $bool ) {
-			$this->is_strict_filetypes = (boolean)$bool;
+			$this->is_strict_filecheck = (boolean)$bool;
 		}
 		
 		/**
@@ -283,10 +292,11 @@
 				if ( is_file( $filenames[$i] ) ) {
 					$pathinfo = pathinfo( $filenames[$i] );
 					
-					$file['path'] = realpath( $filenames[$i] );
+					$file['path'] = $pathinfo['dirname'] . '/' . $pathinfo['basename'];
+					$file['dirname'] = $pathinfo['dirname'];
 					$file['origname'] = $pathinfo['basename'];
-					$file['name'] = $pathinfo['basename'];
-					$file['savename'] = $pathinfo['basename'] . '.' . $pathinfo['extension'];
+					$file['name'] = $pathinfo['filename'];
+					$file['savename'] = $pathinfo['basename'];
 					$file['isnew'] = false;
 					$file['ext'] = $pathinfo['extension'];
 					
@@ -317,7 +327,7 @@
 		 */
 		protected function process_file_add( $file, $isUrl = false ) {
 			// get the raw file content
-			$filecontent = self::getFileContents( $file['path'], $isUrl );
+			$filecontent = $this->getFileContents( $file['path'], $isUrl );
 			
 			if ( $filecontent === false || empty( $filecontent ) ) {
 				return $this->add_invalid_file( $file, ( $isUrl ) ? self::ERR_FILE_URL_READ : self::ERR_FILE_EMPTY ); 
@@ -327,22 +337,28 @@
 				// guess the file extension
 				$file['ext'] = self::guess_fileextension( null, $filecontent );
 				if ( !$file['ext'] ) {
-					// if file extension could not be guessed and @is_strict_filetypes is set to true.. dont let the file pass
-					if ( $this->is_strict_filetypes && $file['isnew'] ) {
+					// if file extension could not be guessed and phpFileHandler::is_strict_filecheck is set to true.. dont let the file pass
+					if ( $this->is_strict_filecheck && $file['isnew'] ) {
 						return $this->add_invalid_file( $file, self::ERR_FILE_TYPE ); 
 					}
+					// otherwise try to get the extension via mime type (only for uploads)
+					// or from the file's basename
 					if ( isset( $file['mime'] ) && !empty( $file['mime'] ) ) {
 						$ext_guess = substr( strrchr( $file['mime'], '/' ), 1 );
 					} else if ( strpos( $file['name'], '.' ) !== false ) {
 						$ext_guess = substr( strrchr( $file['name'], '.' ), 1 );
 					}
-					$file['ext'] = str_replace( 'jpeg', 'jpg', $ext_guess ?? 'file' );
+					// in the worst case the file becomes the extension 'file'
+					$file['ext'] = $ext_guess ?? 'file';
 				}
 			}
+			// 'jpeg' to 'jpg'
+			$file['ext'] = str_replace( 'jpeg', 'jpg', $file['ext'] );
 			
 			// get the file size using mb_strlen or strlen (fallback when php_mbstring module is not loaded)
 			// Note that this is only accurate when using mb_strlen because of mbstring.func_overload (which has been DEPRECATED as of PHP 7.2.0)
 			$filesize = ( $this->is_mbstring_ext ) ? mb_strlen( $filecontent, '8bit' ) : strlen( $filecontent );
+			$file['size'] = $filesize;
 			if ( $this->MaxFileSize !== 0 && $filesize > $this->MaxFileSize ) {
 				return $this->add_invalid_file( $file, self::ERR_FILE_UPLOAD_SIZE ); 
 			}
@@ -354,9 +370,11 @@
 				}
 			}
 			
-			// filter the filename and remove the extension
+			// remove the extension from the filename
 			$dot_pos = strrpos( $file['name'], '.' );
-			$file['name'] = ( $dot_pos !== false ) ? substr( $file['name'], 0, $dot_pos ) : $file['name'];
+			if ( $dot_pos !== false ) {
+				$file['name'] = substr( $file['name'], 0, $dot_pos );
+			}
 			
 			if ( $isUrl ) {
 				// generate a random temporary name for the file and save it to the system's default temp directory
@@ -364,12 +382,11 @@
 				file_put_contents( $file['path'], $filecontent );
 			}
 			
-			if ( $file['ext'] === 'jpg' && $this->is_gd2_ext ) {
+			if ( $file['isnew'] && $file['ext'] === 'jpg' && $this->is_gd2_ext ) {
 				// only jpg supported
 				$this->fix_image_orientation( $file['path'], $filecontent );
 			}
 			
-			$file['size'] = $filesize;
 			if ( $file['isnew'] ) {
 				$this->add_valid_file( $file );
 			} else {
@@ -379,69 +396,87 @@
 		}
 		
 		/**
-		 * Saves all files in phpFileHandler->Files_valid to the given $savepath
+		 * Saves all files in phpFileHandler->Files_valid in to the given directory
 		 * @param string $to The file save path
 		 * @param boolean $allow_dir_create True to allow phpFileHandler to create the save path if not existing (recursive)
+		 * @param boolean $allow_override True to allow file overwriting
 		 * @param integer $file_index Index of an phpFileHandler->Files_valid file
-		 * @param string $name A custom filename when saving a single file
-		 * @return boolean | null Only when passing a $file_index
-		 * * True on success
-		 * * False on failure
-		 * * Null when $file_index is an undefined array index of $Files_valid
 		 */
-		public function save( $to, $allow_dir_create = false, $file_index = null, $name = null ) {
-			$to = self::prepare_path_string( $to, true );
-			self::try_create_folder( $to, $allow_dir_create );
-			if ( $file_index === null ) {
-				for( $i = 0; $i < $this->Files_valid_count; $i++ ) {
+		public function save( $to, $allow_dir_create = false, $allow_override = false, $file_index = null ) {
+			$to = ( $to === '/' || empty( $to ) ) ? './' : $to;
+			for( $i = 0; $i < $this->Files_valid_count; $i++ ) {
+				if ( $file_index !== null && $file_index != $i ) {
+					continue;
+				}
+				if ( !$this->Files_valid[$i]['issaved'] ) {
 					// generate a new filename or take the original
 					$name = ( $this->is_uniq_filenames ) ? self::uniqString( $this->uniq_string_length ) : $this->Files_valid[$i]['name'];
-					$savename = $name . '.' . $this->Files_valid[$i]['ext'];
-					$new_path = $to . $savename;
-					if ( !$this->Files_valid[$i]['issaved'] ) {
-						if ( is_uploaded_file( $this->Files_valid[$i]['path'] ) ) {
-							move_uploaded_file( $this->Files_valid[$i]['path'], $new_path );
-						} else {
-							rename( $this->Files_valid[$i]['path'], $new_path );
-						}
-						$this->Files_valid[$i]['name'] = $name;
-						$this->Files_valid[$i]['savename'] = $savename;
-						$this->Files_valid[$i]['path'] = $new_path;
+					$this->Files_valid[$i]['name'] = $name;
+					$this->Files_valid[$i]['savename'] = $name . '.' . $this->Files_valid[$i]['ext'];
+					
+					// try to move the file to its destination
+					if ( $this->move_file( $i, $to, $allow_dir_create, $allow_override, false, true ) ) {
 						$this->add_ready_file( $this->Files_valid[$i] );
 					} else {
-						$this->add_invalid_file( $this->Files_valid[$i], self::ERR_FILE_SAVE ); 
+						// error moving the file to its new destination
+						$this->add_invalid_file( $this->Files_valid[$i], self::ERR_FILE_SAVE );
 					}
-				}
-			} else {
-				if ( isset( $this->Files_valid[ $file_index ] ) ) {
-					if ( !$this->Files_valid[ $file_index ]['issaved'] ) {
-						return false;
-					}
-					// is a custom filename set?
-					if ( !$name ) {
-						// generate a new filename or take the original
-						$name = ( $this->is_uniq_filenames ) ? self::uniqString( $this->uniq_string_length ) : $this->Files_valid[ $file_index ]['name'];
-					}
-					$savename = $name . '.' . $this->Files_valid[ $file_index ]['ext'];
-					$new_path = $to . $savename;
-					if ( !$this->Files_valid[ $file_index ]['issaved'] ) {
-						if ( is_uploaded_file( $this->Files_valid[ $file_index ]['path'] ) ) {
-							move_uploaded_file( $this->Files_valid[ $file_index ]['path'], $new_path );
-						} else {
-							rename( $this->Files_valid[$i]['path'], $new_path );
-						}
-						$this->Files_valid[ $file_index ]['name'] = $name;
-						$this->Files_valid[ $file_index ]['savename'] = $savename;
-						$this->Files_valid[ $file_index ]['path'] = $new_path;
-						$this->add_ready_file( $this->Files_valid[ $file_index ] );
-					} else {
-						$this->add_invalid_file( $this->Files_valid[ $file_index ], self::ERR_FILE_SAVE ); 
-					}
-				} else {
-					return null;
 				}
 			}
-			return true;
+		}
+		
+		/**
+		 * Securely moves or copys a file to a new location
+		 * @param mixed $file_index Index of the file in 
+		 * @param string $dest The destination path
+		 * @param boolean $allow_dir_create True to allow phpFileHandler to create the save path if not existing (recursive)
+		 * @param boolean $allow_override True to allow file override
+		 * @param boolean $copy True to copy the file to the given location
+		 * @param boolean $isValidFile True if the $file_index is a ::Files_valid index (only for internal usage)
+		 * @return boolean True on success, False on failure
+		 */
+		public function move_file( $file_index, $to, $allow_dir_create = false, $allow_override = false, $copy = false, $isValidFile = false ) {
+			if ( $isValidFile ) {
+				$FilePointer = & $this->Files_valid[ $file_index ];
+			} else {
+				if ( !isset( $this->Files_ready[ $file_index ] ) ) {
+					return false;
+				}
+				$FilePointer = & $this->Files_ready[ $file_index ];
+			}
+			
+			$to = self::prepare_path_string( $to, true );
+	
+			// will throw error if the folder does not exist and $allow_dir_create is set to false
+			self::try_create_folder( $to, $allow_dir_create );
+			
+			if ( $copy ) {
+				// just a file copy..
+				return copy( $FilePointer['path'], $to . $FilePointer['savename'] );
+			} else {
+				// get the destination file path
+				$dest_file = $to . $FilePointer['savename'];
+				
+				// check if file overriding is enabled
+				if ( !$allow_override && is_file( $dest_file ) ) {
+					return false;
+				}
+				
+				// move the file to the new destination
+				if ( is_uploaded_file( $FilePointer['path'] ) ) {
+					$isSuccess = move_uploaded_file( $FilePointer['path'], $dest_file );
+				} else {
+					$isSuccess = rename( $FilePointer['path'], $dest_file );
+				}
+				
+				if ( $isSuccess ) {
+					// set the new dirname and path on success
+					$FilePointer['dirname'] = rtrim( $to, '/' );
+					$FilePointer['path'] = $dest_file;
+				}
+				
+				return $isSuccess;
+			}
 		}
 		
 		/**
@@ -487,38 +522,6 @@
 			
 			$this->Files_ready[] = $file;
 			$this->Files_ready_count++;
-		}
-		
-		/**
-		 * Securely moves or copys a file to a new location
-		 * @param string $source Path to the source file. 
-		 * @param string $dest The destination path
-		 * @param boolean $allow_dir_create True to allow phpFileHandler to create the save path if not existing (recursive)
-		 * @param boolean $allow_override True to allow file override
-		 * @param boolean $copy True to copy the file to the given location
-		 * @return boolean True on success, False on failure
-		 */
-		public static function move_file( $filename, $to, $allow_dir_create = false, $allow_override = false, $copy = false ) {
-			if ( !is_file( $filename ) || !is_dir( $to ) ) {
-				return false;
-			}
-			
-			// force an absolute folder destination path
-			$dest_dir = self::prepare_path_string( $to, true );
-			// get the absolute destination file path
-			$dest_file = $dest_dir . basename( $filename );
-			
-			if ( !$allow_override && is_file( $dest_file ) ) {
-				return false;
-			}
-			
-			self::try_create_folder( $dest_dir, $allow_dir_create );
-			
-			if ( $copy ) {
-				return copy( $filename, $dest_dir );
-			} else {
-				return rename( $filename, $dest_file );
-			}
 		}
 		
 		/**
@@ -569,61 +572,6 @@
 		}
 		
 		/**
-		 * Trys to create a folder (recursive)
-		 * @param string $dir The folder path
-		 * @param boolean $allow_dir_create
-		 * @throws Exception IF the folder does not exists AND:
-		 * * - $allow_dir_create is false
-		 * * - PHP has no permission to create folders at the given location
-		 */
-		protected static function try_create_folder( $dir, $allow_dir_create ) {
-			if ( !is_dir( $dir ) ) {
-				if ( $allow_dir_create ) {
-					if ( !mkdir( $dir, 0777, true ) ) {
-						throw new Exception( 'Unable to create folder, check the parent folder\'s permissions it must be writable for the system user which executes PHP.' );
-					}
-					// ensure file mode
-					chmod( $dir, 0777 );
-				} else {
-					throw new Exception( '"' . htmlspecialchars( $dir ) . '" path does not exist, set @param $allow_dir_create to TRUE to allow path creation.' );
-				}
-			}
-		}
-		
-		/**
-		 * Gets the raw file byte data as string
-		 * @param string $filename Path to the file
-		 * @return string | boolean The raw byte stream from the given file as string OR false if the file does not exist or the web url could not be reached
-		 */
-		protected static function getFileContents( $filename, $isUrl = false ) {
-			$isUrl = ( !$isUrl && filter_var( $filename, FILTER_VALIDATE_URL ) ) ? true : $isUrl;
-			if ( $isUrl ) {
-				// $filename is a web url
-				try {
-					$filecontent = file_get_contents(
-						$filename, false,
-						stream_context_create(
-							array(
-								'http' => array(
-									'method' => 'GET',
-									'timeout' => 10	// timout after a 10 seconds connection attempt
-								)
-							)
-						), 0, $this->MaxFileSize
-					);
-				} catch( Exception $exc ) {
-					return false;
-				}
-			} else {
-				if ( !is_file( $filename ) ) {
-					return false;
-				}
-				$filecontent = file_get_contents( $filename );
-			}
-			return $filecontent;
-		}
-		
-		/**
 		 * Guesses the file's type by checking its signature
 		 * @param string $filecontent A raw file content as string
 		 * @return string | boolean Return the guessed file extension or false if the file or web url is invalid (see @->getFileContents()) none of the following signature could be found:
@@ -631,7 +579,7 @@
 		 */
 		public static function guess_fileextension( $filename = null, $filecontent = null ) {
 			if ( $filename ) {
-				$filecontent = self::getFileContents( $filename );
+				$filecontent = $this->getFileContents( $filename );
 				if ( !$filecontent ) {
 					return false;
 				}
@@ -697,7 +645,7 @@
 		public static function compareFileSignature( $comparison, $signature = null, $filename = null, $index = 0 ) {
 			$count = count( $comparison );
 			if ( $filename ) {
-				$filecontent = self::getFileContents( $filename );
+				$filecontent = $this->getFileContents( $filename );
 				if ( !$filecontent ) {
 					return false;
 				}
@@ -787,6 +735,64 @@
 		}
 		
 		/**
+		 * Trys to create a folder (recursive)
+		 * @param string $dir The folder path
+		 * @param boolean $allow_dir_create
+		 * @throws Exception IF the folder does not exists AND:
+		 * * - $allow_dir_create is false
+		 * * - PHP has no permission to create folders at the given location
+		 */
+		protected static function try_create_folder( $dir, $allow_dir_create ) {
+			if ( !is_dir( $dir ) ) {
+				if ( $allow_dir_create ) {
+					if ( !mkdir( $dir, 0777, true ) ) {
+						throw new Exception( 'Unable to create folder, check the parent folder\'s permissions it must be writable for the system user which executes PHP.' );
+					}
+					// ensure file mode
+					chmod( $dir, 0777 );
+				} else {
+					throw new Exception( '"' . htmlspecialchars( $dir ) . '" \n\n\npath does not exist, set @param $allow_dir_create to TRUE to allow path creation.' );
+				}
+			}
+		}
+		
+		/**
+		 * Gets the raw file byte data as string
+		 * @param string $filename Path to the file
+		 * @return string | boolean The raw byte stream from the given file as string OR false if the file does not exist or the web url could not be reached
+		 */
+		protected function getFileContents( $filename, $isUrl = false ) {
+			$isUrl = ( !$isUrl && filter_var( $filename, FILTER_VALIDATE_URL ) ) ? true : $isUrl;
+			if ( $isUrl ) {
+				// $filename is a web url
+				try {
+					$filecontent = file_get_contents(
+						$filename,
+						false,
+						stream_context_create(
+							array(
+								'http' => array(
+									'method' => 'GET',
+									'timeout' => 10	// timout after a 10 seconds connection attempt
+								)
+							)
+						),
+						0,	// 'upload_max_filesize' return something like 8M (for 8megabyte) convert it to integer and format to bytes
+						( $this->MaxFileSize === 0 ) ? ((int)ini_get( 'upload_max_filesize' ))*1000000 : $this->MaxFileSize
+					);
+				} catch( Exception $exc ) {
+					return false;
+				}
+			} else {
+				if ( !is_file( $filename ) ) {
+					return false;
+				}
+				$filecontent = file_get_contents( $filename );
+			}
+			return $filecontent;
+		}
+		
+		/**
 		 * Strips all characters except from the folowing: 'a-z'  'A-Z'  '0-9'  '_'  '-'  '.'
 		 * and shortens the string to a maximum of 100 characters
 		 * If the string is not utf-8 encoded a random string will get returned!
@@ -836,7 +842,6 @@
 
 		/*
 		 * Create a thumbnail in the same folder as the reference image
-		 * if $filename is null, it will create a thumb from every image file from @phpFileHandler->Files_valid
 		 * @param string $size See @param $type for explanation
 		 * @param string $type The thumb generation type
 		 * * If the image is smaller than $size it will just create a copy with the prefixed name
@@ -846,34 +851,22 @@
 		 * * Note when you set an empty prefix if a file with the same name exists in the given directory it will be overwritten !
 		 * @param boolean $allowGrowth Whether or not to allow a bigger output image
 		 * @param string $to Set a save path for the thumb
-		 * @param string $filename Path to the image file
+		 * @param boolean $allow_dir_create Set to true to enable folder creation, only applies when $to is set
+		 * @param mixed $file_index An array index of Files_ready
 		 */
-		public function thumb( $size, $type = '', $prefix = '_thumb', $allowGrowth = false, $to = null, $filename = null ) {
+		public function thumb( $size, $type = '', $prefix = '_thumb', $allowGrowth = false, $to = null, $allow_dir_create = false, $file_index = null ) {
 			if ( $to ) {
 				$to = self::prepare_path_string( $to, true );
-				if ( !is_dir( $to ) ) {
-					throw new Exception( htmlspecialchars( $to ) . ' is not a directory or does not exist.' );
-				}
+				self::try_create_folder( $to, $allow_dir_create );
 			}
-			if ( !$filename ) {
-				// generate a thumb for each of the phpFileHandler->Files_valid
-				for( $i = 0; $i < $this->Files_valid_count; $i++ ) {
-					if ( in_array( $this->Files_valid[$i]['ext'], self::FTY_IMAGES_GD ) ) {
-						$savepath = ( !$to ) ? $this->Files_valid[$i]['path'] : $to . $this->Files_valid[$i]['savename'];
-						$image = self::create_image( $this->Files_valid[$i]['path'], $this->Files_valid[$i]['ext'], $size, $type, $allowGrowth );
-						self::save_image( $image, $savepath, $this->Files_valid[$i]['ext'], $prefix );
-					}
+			for( $i = 0; $i < $this->Files_ready_count; $i++ ) {
+				if ( $file_index !== null && $file_index != $i ) {
+					continue;
 				}
-			} else {
-				if ( !is_file( $filename ) ) {
-					throw new Exception( 'File does not exist (' . htmlspecialchars( $filename ) . ')' );
-				}
-				// generate a thumb for the given file if its an image file which can be handled by GD
-				$ext = substr( strrchr( $filename, '.' ), 1 );
-				if ( in_array( $ext, self::FTY_IMAGES_GD ) ) {
-					$savepath = ( !$to ) ? $filename : $to . substr( $filename, strrpos( $filename, '/' )+1 );
-					$image = self::create_image( $filename, $ext, $size, $type, $allowGrowth );
-					self::save_image( $image, $savepath, $ext, $prefix );
+				if ( in_array( $this->Files_ready[$i]['ext'], self::FTY_IMAGES_GD ) ) {
+					// get the processed image ressource
+					$image = $this->create_image( $i, $size, $type, $allowGrowth );
+					$this->save_image( $image, $i, $to, $prefix );
 				}
 			}
 		}
@@ -881,42 +874,141 @@
 		/*
 		 * Resizes the image proportional
 		 * * see @thumb() description for the details
-		 * @param string $filename Path to the image file
-		 * @param string $size See @param $type for explanation
+		 * @param integer $size See @param $type for more info
 		 * @param string $to Set a save path for the thumb
 		 * @param string $prefix If not set the file will be overwritten (if the output is in the same folder)
+		 * @param mixed $file_index An array index of Files_ready
 		 */
-		public function resize( $filename, $size, $to = null, $prefix = '' ) {
-			$this->thumb( $size, $to, $filename, '', $prefix, true );
+		public function resize( $size, $to = null, $prefix = '', $file_index = null ) {
+			$this->thumb( $size, '', $prefix, true, $to, false, $file_index );
 		}
 		
 		/*
-		 * Converts an image file to the given ouput type
-		 * @param string $filename Path to the image file
+		 * Converts images to the given type
 		 * @param string $output_type The output file type (see @save_image() for which output types are supported)
 		 * @param boolean $keepOriginal whether to keep or delete the original file 
+		 * @param mixed $file_index An array index of Files_ready
 		 */
-		public function convert_image( $filename, $output_type, $keepOriginal = false ) {
-			if ( !is_file( $filename ) ) {
-				throw new Exception( 'File does not exist (' . htmlspecialchars( $filename ) . ')' );
+		public function convert_image( $output_type, $keepOriginal = false, $file_index = null ) {
+			$output_type = strtolower( str_replace( 'jpeg', 'jpg', $output_type ) );
+			for( $i = 0; $i < $this->Files_ready_count; $i++ ) {
+				if ( $file_index !== null && $file_index != $i ) {
+					continue;
+				}
+				if ( in_array( $this->Files_ready[$i]['ext'], self::FTY_IMAGES_GD ) ) {
+					// continue if the file type already is the same as output_type
+					if ( $this->Files_ready[$i]['ext'] === $output_type ) {
+						continue;
+					}
+					$original_file = $this->Files_ready[$i]['path'];
+					
+					$image = $this->create_image( $i );
+					$this->save_image( $image, $i, null, '', $output_type );
+					
+					// whether or not to delete the original file
+					if ( !$keepOriginal ) {
+						unlink( $original_file );
+					}
+				}
 			}
-			$image = self::create_image( $filename );
-			self::save_image( $image, $filename, $output_type );
-			if ( !$keepOriginal ) {
-				unlink( $filename );
+		}
+		
+		/*
+		 * Adds an watermark to the image
+		 * @param string $watermark Path to the watermark image
+		 * @param float $opacity The watermark's opacity From 0.00 (fully transparent) to 1.00 (fully visible)
+		 * @param string $position The watermark's position
+		 * @param integer $offsetX Horizontal offset
+		 * @param integer $offsetY Vertical offset
+		 * @param mixed $file_index An array index of Files_ready
+		 * @throws Exception
+		 */
+		public function put_watermark( $watermark, $opacity = 0.5, $position = 'center', $offsetX = 0, $offsetY = 0, $file_index = null ) {
+			if ( !is_file( $watermark )  ) {
+				throw new Exception( 'Watermark file does not exist (' . htmlspecialchars( $watermark ) . ')' );
 			}
+			
+			$watermark_image = imagecreatefromstring( file_get_contents( $watermark ) );
+			if ( !$watermark_image ) {
+				throw new Exception( 'GD extension cannot create an image from the Watermark image' );
+			}
+			
+			$watermark_width = imagesx( $watermark_image );
+			$watermark_height = imagesy( $watermark_image );
+			
+			// keep the opacity value in range
+			$opacity = (int) ((( $opacity < 0 ) ? 0 : (( $opacity > 1 ) ? 1 : $opacity )) * 100);
+			if ( $opacity < 100 ) {
+				// workaround for transparent images because PHP's imagecopymerge does not support alpha channel
+				imagealphablending( $watermark_image, false );
+				imagefilter( $watermark_image, IMG_FILTER_COLORIZE, 0, 0, 0, 127 * ((100 - $opacity) / 100) );
+			}
+			
+			for( $i = 0; $i < $this->Files_ready_count; $i++ ) {
+				if ( $file_index !== null && $file_index != $i ) {
+					continue;
+				}
+				if ( in_array( $this->Files_ready[$i]['ext'], self::FTY_IMAGES_GD ) ) {
+					$target_image = $this->create_image( $i );
+					$target_width = imagesx( $target_image );
+					$target_height = imagesy( $target_image );
+
+					switch( $position ) {
+						case 'top': {
+							$x = ($target_width / 2) - ($watermark_width / 2) + $offsetX;
+							$y = $offsetY;
+						} break;
+						case 'left': {
+							$x = $offsetX;
+							$y = ($target_height / 2) - ($watermark_height / 2) + $offsetY;
+						} break;
+						case 'right': {
+							$x = $target_width - $watermark_width + $offsetX;
+							$y = ($target_height / 2) - ($watermark_height / 2) + $offsetY;
+						} break;
+						case 'bottom': {
+							$x = ($target_width / 2) - ($watermark_width / 2) + $offsetX;
+							$y = $target_height - $watermark_height + $offsetY;
+						} break;
+						case 'top left': {
+							$x = $offsetX;
+							$y = $offsetY;
+						} break;
+						case 'top right': {
+							$x = $target_width - $watermark_width + $offsetX;
+							$y = $offsetY;
+						} break;
+						case 'bottom left': {
+							$x = $offsetX;
+							$y = $target_height - $watermark_height + $offsetY;
+						} break;
+						case 'bottom right': {
+							$x = $target_width - $watermark_width + $offsetX;
+							$y = $target_height - $watermark_height + $offsetY;
+						} break;
+						default: {	// center
+							$x = ($target_width / 2) - ($watermark_width / 2) + $offsetX;
+							$y = ($target_height / 2) - ($watermark_height / 2) + $offsetY;
+						} break;
+					}
+					
+					// put the watermark on the target image
+					imagecopy( $target_image, $watermark_image, $x, $y, 0, 0, $watermark_width, $watermark_height );
+
+					$this->save_image( $target_image, $i );
+				}
+			}
+			
+			// destroy the image ressource to free the ram
+			imagedestroy( $watermark_image );
 		}
 		
 		/*
 		 * Try to fix the image's orientation
 		 * @param string $filename Path to the image file
 		 * @param string $filecontent The raw image content
-		 * @return boolean False if the file does not exists else true
 		 */
-		public function fix_image_orientation( $filename, $filecontent = null ) {
-			if ( !is_file( $filename ) || !self::is_jpg( $filename ) ) {
-				return false;
-			}
+		protected function fix_image_orientation( $filename, $filecontent ) {
 			$data = exif_read_data( $filename );
 			if ( !empty( $data['Orientation'] ) ) {
 				switch( $data['Orientation'] ) {
@@ -926,120 +1018,36 @@
 					default: $newAngle = false;
 				}
 				if ( $newAngle ) {
-					$image = imagecreatefromstring( ( !$filecontent ) ? self::getFileContents( $filename ) : $filecontent );
+					$image = imagecreatefromstring( $filecontent );
 					$image = imagerotate( $image, $newAngle, 0 );
-					self::save_image( $image, $filename );
+					$this->save_image( $image, $filename );
 				}
 			}
-			return true;
-		}
-		
-		/*
-		 * Adds an watermark to the image
-		 * @param string $target Path to the target image
-		 * @param string $watermark Path to the watermark image
-		 * @param float $opacity The watermark's opacity From 0.00 (fully transparent) to 1.00 (fully visible)
-		 * @param string $position The watermark's position
-		 * @param integer $offsetX Horizontal offset
-		 * @param integer $offsetY Vertical offset
-		 */
-		public function put_watermark( $target, $watermark, $opacity = 0.5, $position = 'center', $offsetX = 0, $offsetY = 0 ) {
-			if ( !is_file( $target ) ) {
-				throw new Exception( 'Target file does not exist (' . htmlspecialchars( $target ) . ')' );
-			} else if ( !is_file( $watermark )  ) {
-				throw new Exception( 'Watermark file does not exist (' . htmlspecialchars( $watermark ) . ')' );
-			}
-			
-			// keep the opacity value in range
-			$opacity = (int) ((( $opacity < 0 ) ? 0 : (( $opacity > 1 ) ? 1 : $opacity )) * 100);
-			
-			$target_image = self::create_image( $target );
-			$target_width = imagesx( $target_image );
-			$target_height = imagesy( $target_image );
-			
-			$watermark_image = self::create_image( $watermark );
-			$watermark_width = imagesx( $watermark_image );
-			$watermark_height = imagesy( $watermark_image );
-			
-			switch( $position ) {
-				case 'top': {
-					$x = ($target_width / 2) - ($watermark_width / 2) + $offsetX;
-					$y = $offsetY;
-				} break;
-				case 'left': {
-					$x = $offsetX;
-					$y = ($target_height / 2) - ($watermark_height / 2) + $offsetY;
-				} break;
-				case 'right': {
-					$x = $target_width - $watermark_width + $offsetX;
-					$y = ($target_height / 2) - ($watermark_height / 2) + $offsetY;
-				} break;
-				case 'bottom': {
-					$x = ($target_width / 2) - ($watermark_width / 2) + $offsetX;
-					$y = $target_height - $watermark_height + $offsetY;
-				} break;
-				case 'top left': {
-					$x = $offsetX;
-					$y = $offsetY;
-				} break;
-				case 'top right': {
-					$x = $target_width - $watermark_width + $offsetX;
-					$y = $offsetY;
-				} break;
-				case 'bottom left': {
-					$x = $offsetX;
-					$y = $target_height - $watermark_height + $offsetY;
-				} break;
-				case 'bottom right': {
-					$x = $target_width - $watermark_width + $offsetX;
-					$y = $target_height - $watermark_height + $offsetY;
-				} break;
-				default: {	// center
-					$x = ($target_width / 2) - ($watermark_width / 2) + $offsetX;
-					$y = ($target_height / 2) - ($watermark_height / 2) + $offsetY;
-				} break;
-			}
-			
-			if ( $opacity < 100 ) {
-				// workaround for transparent images because PHP's imagecopymerge does not support alpha channel
-				imagealphablending( $watermark_image, false );
-				imagefilter( $watermark_image, IMG_FILTER_COLORIZE, 0, 0, 0, 127 * ((100 - $opacity) / 100) );
-			}
-
-			// put the watermark on the target image
-			imagecopy( $target_image, $watermark_image, $x, $y, 0, 0, $watermark_width, $watermark_height );
-			
-			imagedestroy( $watermark_image );
-			
-			self::save_image( $target_image, $target );
 		}
 		
 		/**
 		 * Generates the settings for the thumb used in imagecopyresampled() function
 		 * * NOTE: imagecreatefrombmp is only availible for PHP 7 >= 7.2.0
 		 * * NOTE: imagecreatefromwebp is only availible for PHP 5 >= 5.5.0, PHP 7
-		 * @param integer $width Orignial image width
-		 * @param integer $height Orignial image height
-		 * @param integer $size The destination size
+		 * @param mixed $file_index An array index of Files_ready
+		 * @param integer $size The destination size (see @generate_thumbsettings())
 		 * @param string $type An image resource possible type
 		 * @param boolean $allowGrowth Whether or not to allow a bigger output image
 		 * @return resource An image resource
 		 */
-		private function create_image( $filename, $ext = null, $size = null, $type = null, $allowGrowth = false ) {
+		private function create_image( $file_index, $size = null, $type = null, $allowGrowth = false ) {
 			// create an image resource from the original image
-			$ext = ( !$ext ) ? substr( strrchr( $filename, '.' ), 1 ) : $ext;
-			switch( $ext ) {
-				case 'jpeg':
-				case 'jpg': { $image = imagecreatefromjpeg( $filename ); } break;
-				case 'gif': { $image = imagecreatefromgif( $filename ); } break;
-				case 'png': { $image = imagecreatefrompng( $filename ); } break;
-				case 'gd': { $image = imagecreatefromgd( $filename ); } break;
-				case 'gd2': { $image = imagecreatefromgd2( $filename ); } break;
-				case 'bmp': { $image = imagecreatefrombmp( $filename ); } break;
-				case 'wbmp': { $image = imagecreatefromwbmp( $filename ); } break;
-				case 'webp': { $image = imagecreatefromwebp( $filename ); } break;
-				case 'xbm': { $image = imagecreatefromxbm( $filename ); } break;
-				default: throw new Exception( 'GD extension cannot create an image from this image type ("' . htmlspecialchars( $ext ) . '")' ); 
+			switch( $this->Files_ready[ $file_index ]['ext'] ) {
+				case 'jpg': { $image = imagecreatefromjpeg( $this->Files_ready[ $file_index ]['path'] ); } break;
+				case 'gif': { $image = imagecreatefromgif( $this->Files_ready[ $file_index ]['path'] ); } break;
+				case 'png': { $image = imagecreatefrompng( $this->Files_ready[ $file_index ]['path'] ); } break;
+				case 'gd': { $image = imagecreatefromgd( $this->Files_ready[ $file_index ]['path'] ); } break;
+				case 'gd2': { $image = imagecreatefromgd2( $this->Files_ready[ $file_index ]['path'] ); } break;
+				case 'bmp': { $image = imagecreatefrombmp( $this->Files_ready[ $file_index ]['path'] ); } break;
+				case 'wbmp': { $image = imagecreatefromwbmp( $this->Files_ready[ $file_index ]['path'] ); } break;
+				case 'webp': { $image = imagecreatefromwebp( $this->Files_ready[ $file_index ]['path'] ); } break;
+				case 'xbm': { $image = imagecreatefromxbm( $this->Files_ready[ $file_index ]['path'] ); } break;
+				default: throw new Exception( 'GD extension cannot create an image from this image type ("' . htmlspecialchars( $this->Files_ready[ $file_index ]['ext'] ) . '")' );
 			}
 
 			if ( $size && $type !== null ) {
@@ -1053,7 +1061,7 @@
 				if ( $settings ) {
 					// create a new empty image
 					$new_image = imagecreatetruecolor( $settings['dst_width'], $settings['dst_height'] );
-					if ( $ext !== 'jpeg' && $ext !== 'jpg' ) {
+					if ( $this->Files_ready[ $file_index ]['ext'] !== 'jpg' ) {
 						// create an alpha canal for the image and set the background to fully transparent
 						imagecolortransparent( $new_image, imagecolorallocatealpha( $new_image, 0, 0, 0, 127 ) );
 						imagealphablending( $new_image, false );
@@ -1068,6 +1076,7 @@
 						$settings['src_width'], $settings['src_height']		//	src_w,			src_h
 					);
 					
+					// destroy the image ressource to free the ram
 					imagedestroy( $image );
 					
 					return $new_image;
@@ -1078,37 +1087,65 @@
 		}
 		
 		/**
-		 * Saves an image resource to a file 
+		 * creates an image file from an image ressource
 		 * NOTE that this function will overwrite an existing file with the same name
 		 * @param resource $image An image resource
-		 * @param string $filename The full image saving path
-		 * @param string $ext The filetype extension
+		 * @param mixed $file_index An array index of Files_ready
+		 * @param string $dir An save directory ( must exist! )
 		 * @param string $prefix Adds a prefix after the filename ( 'image.jpg' -> 'image_thumb.jpg' )
+		 * @param string $output_type The output image type
+		 * @throws exception
 		 */
-		protected static function save_image( $image, $saveto, $output_type = null, $prefix = '' ) {
-			$ext = substr( strrchr( $saveto, '.' ), 1 );
-			$output_type = ( !$output_type ) ? $ext : $output_type;
-			
-			// insert the prefix and / or
-			// force the output filename have the output_type extension
-			if ( !empty( $prefix ) || $ext !== $output_type ) {
-				$saveto = substr( $saveto, 0, strrpos( $saveto, '.' )  ) . $prefix . '.' . $output_type;
+		protected function save_image( $image, $file_index, $dir = null, $prefix = '', $output_type = null ) {
+			// if output type is not set, its the same as the input type
+			if ( !$output_type ) {
+				$output_type = $this->Files_ready[ $file_index ]['ext'];
 			}
 			
+			if ( !empty( $prefix ) ) {
+				// append the prefix to the savename
+				$savename = substr( $this->Files_ready[ $file_index ]['savename'], 0, strrpos( $this->Files_ready[ $file_index ]['savename'], '.' ) ) . $prefix . '.' . $output_type; 
+			} else {
+				if ( $this->Files_ready[ $file_index ]['ext'] !== $output_type ) {
+					// change the extension
+					$savename = str_replace( $this->Files_ready[ $file_index ]['ext'], $output_type, $this->Files_ready[ $file_index ]['savename'] );
+				} else{
+					$savename = $this->Files_ready[ $file_index ]['savename'];
+				}
+			}
+			
+			// set the directory and output path
+			if ( $dir ) {
+				$output_path = $dir . $savename;
+				$dir = rtrim( $dir, '/' );
+			} else {
+				$dir = substr( $this->Files_ready[ $file_index ]['path'], 0, strrpos( $this->Files_ready[ $file_index ]['path'], '/' )  );
+				$output_path = $dir . '/' . $savename;
+			}
+			
+			// only save the File when no prefix is given
+			if ( empty( $prefix ) ) {
+				$this->Files_ready[ $file_index ]['path'] = $output_path;
+				$this->Files_ready[ $file_index ]['dirname'] = $dir;
+				$this->Files_ready[ $file_index ]['savename'] = $savename;
+				$this->Files_ready[ $file_index ]['ext'] = $output_type;
+			}
+		
+			// output the image to a file
 			switch( $output_type ) {
-				case 'jpeg':
-				case 'jpg': { imagejpeg( $image, $saveto ); } break;
-				case 'gif': { imagegif( $image, $saveto ); } break;
-				case 'png': { imagepng( $image, $saveto ); } break;
-				case 'gd': { imagegd( $image, $saveto ); } break;
-				case 'gd2': { imagegd2( $image, $saveto ); } break;
-				case 'bmp': { imagebmp( $image, $saveto ); } break;
-				case 'wbmp': { imagewbmp( $image, $saveto ); } break;
-				case 'webp': { imagewebp( $image, $saveto ); } break;
-				case 'xbm': { imagexbm( $image, $saveto ); } break;
-				default: throw new Exception( 'GD extension cannot create an image from this image type ("' . htmlspecialchars( $ext ) . '")' ); 
+				case 'jpg': { imagejpeg( $image, $output_path ); } break;
+				case 'gif': { imagegif( $image, $output_path ); } break;
+				case 'png': { imagepng( $image, $output_path ); } break;
+				case 'gd': { imagegd( $image, $output_path ); } break;
+				case 'gd2': { imagegd2( $image, $output_path ); } break;
+				case 'bmp': { imagebmp( $image, $output_path ); } break;
+				case 'wbmp': { imagewbmp( $image, $output_path ); } break;
+				case 'webp': { imagewebp( $image, $output_path ); } break;
+				case 'xbm': { imagexbm( $image, $output_path ); } break;
+				default: throw new Exception( 'GD extension cannot create an image from this image type ("' . htmlspecialchars( $output_type ) . '")' ); 
 			}
 			
+			// destroy the image ressource to free the ram
 			imagedestroy( $image );
 		}
 		
