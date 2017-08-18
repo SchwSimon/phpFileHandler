@@ -119,18 +119,19 @@ A file data element key list example (from a valid & saved file):
 > Note that for invalid files not all of these are set!
 ```php
 array(
-  'path' => 'C:/Apache24/htdocs/data/temp/8dsfsa98df6.jpg', // the full filepath
+  'path' => 'C:/Apache24/htdocs/data/temp/8dsfsa98df6.jpg', // the path to the file
+  'dirname' => 'C:/Apache24/htdocs/data/temp'               // the path to the file's directory
   'origname' => 'Origin$alF &il eName.jpg',                 // original filename, for files from an web url this is the web url
   'name' => 'OriginalFileName',                             // for uploaded files name will be a stripped version of 'origname', for files from a web url "name" will be the last url part ('https://flushmodules.com/css/visuals/fm-icons.png' -> 'fm-icons.png' )
+  'savename' => 'OriginalFileName.jpg',                     // filename with extension
   'uploadKey' => 'avatar',                                  // represents the top level key from $_FILES of the file
-  'savename' => 'OriginalFileName.jpg',
   'isnew' => true,                                          // only false when file was added via phpFileHandler::add_existing_files()
-  'size' => 600000,                                         // in bytes
+  'size' => 600000,                                         // filesize in bytes
   'error' => '',                                            // the error message for invalid files
   'errorCode' => null,                                      // see phpFileHandler::add_invalid_file() for the error codes
-  'isvalid' => true,
-  'ext' => 'jpg',
-  'issaved' => true
+  'isvalid' => true,                                        // whether or not the file passed the sanity checks
+  'ext' => 'jpg',                                           // file extension
+  'issaved' => true                                         // file is on the server and ready for further usage
 )
 ```
 
@@ -149,6 +150,7 @@ $phpFileHandler->add_file_from_url( string $url )
 
 - **_add_existing_files()_**  
 > Add files which already are on the server  
+> This files are pushed directly into **$phpFileHandler->Files_ready** after a successful sanity check
 > Single file:		**$phpFileHandler->add_existing_files( 'Path/To/My/File.jpg' );**  
 > Multiple files:	**$phpFileHandler->add_existing_files( array( 'Path/To/My/File.jpg', 'Path/To/Another/File.png' ) );**  
 ```php
@@ -156,16 +158,22 @@ $phpFileHandler->add_existing_files( mixed $filenames )
 ```
 
 - **_save()_**  
-> Saves all valid files (_which has not yet been saved!_) from **$phpFileHandler->Files_valid** to the specified folder (**$to**)  
-> By default phpFileHandler will NOT create that folder for you, nevertheless you can pass **true** as second parameter to allow folder creation.  
-> You can also save single files from **$phpFileHandler->Files_valid** by passing its *array index* as third parameter.  
-> It will return:  
-> - **true** on success 
-> - **false** on failure 
-> - **null** when passing an undefined *array index* 
-> As fourth parameter you can choose a filename (_only when saving with **$file_index** set!_)
+> Saves all valid files (_which has not yet been saved!_) from **$phpFileHandler->Files_valid** to the specified folder (**$to**) and adds successfully saved files to **$phpFileHandler->Files_ready**  
+> By default phpFileHandler will NOT create that folder for you, nevertheless you can pass **true** as second argument to allow folder creation.  
+> Same for file overriding, you can pass **true** as third argument to enable this behaviour  
+> You can also save single files from **$phpFileHandler->Files_valid** by passing its *array index* as fourth argument.  
 ```php
-$phpFileHandler->save( string $to [, bool $allow_dir_create = false [, int $file_index = null [, string $name = null ]]] )
+$phpFileHandler->save( string $to [, bool $allow_dir_create = false [, bool $allow_override = false [, int $file_index = null ]]] )
+```
+
+- **_move_file()_**  
+> Safely moves a file from one directory to another  
+> *$file_index* An array index from **$phpFileHandler->Files_ready**
+> *$allow_dir_create* Set to true to allow creating a folder if needed  
+> *$allow_override* Set to true to allow file overwrite  
+> *$copy* Set to true to copy the file to the given location by respecting *$allow_dir_create* & *$allow_override*
+```php
+phpFileHandler::move_file( int $file_index, string $to [, bool $allow_dir_create = false [, bool $allow_override = false [, bool $copy = false ]]] )
 ```
 
 - **_remove_added_files()_**  
@@ -185,43 +193,39 @@ _Note:_
 *webp* is just supported in PHP 5 >= 5.5.0, PHP 7
 
 - **_thumb()_**  
-> Creates a thumbnail for every image file in **$phpFileHandler->Files_valid** and saves it in the same directoy.  
+> Creates a thumbnail for every image file in **$phpFileHandler->Files_ready** and saves it in the same directoy.  
+> *$size* The size used to generate the thumbnail
 > *$type*: - '' propotional scale down with *$size* defining the vertical/horizontal limit in pixels  
 >          - 'iso' central isometric image crop *$size* x *$size*  
 > *$prefix* Set a string which is inserted between the extension and filename (_'img.jpg' -> 'img_thumb.jpg'_)  
 > *$allowGrowth* Defines Whether or not the thumbnail can be bigger than the original  
 > *$to* Sets a directoy where to save the thumbnail  
-> *$filename* Create a thumbnail just from this image
+> *$allow_dir_create* Wherter or not to allow folder creation (only applies when $to is set)  
+> *$file_index* An array index from **$phpFileHandler->Files_ready**
 ```php
-$phpFileHandler->thumb( int $size [, string $type = '' [, string $prefix = '_thumb' [, bool $allowGrowth = false [, string $to = null [, string $filename = null ]]]]] )
+$phpFileHandler->thumb( int $size [, string $type = '' [, string $prefix = '_thumb' [, bool $allowGrowth = false [, string $to = null [, bool $allow_dir_create = false [, mixed $file_index = null ]]]]]] )
 ```
 
 - **_resize()_**  
-> Propotional resize to the given *$size* 
+> Resizes every image file in **$phpFileHandler->Files_ready** propotional
 ```php
-$phpFileHandler->resize( string $filename, int $size [, string $to = null [, string $prefix = '' ]] )
+$phpFileHandler->resize( int $size [, string $to = null [, string $prefix = '' [, mixed $file_index = null ]]] )
 ```
 
 - **_convert_image()_**  
-> Converts an image to the given output image type  
-> For default the original image is overwritten!  
+> Converts every image file in **$phpFileHandler->Files_ready** to the given output image type  
+> The original image is overwritten by default!
 > Set *$keepOriginal* to true if you do not want this behaviour
 ```php
-$phpFileHandler->convert_image( string $filename, string $output_type [, bool $keepOriginal = false ] )
-```
-
-- **_fix_image_orientation()_**  
-> Trys to fix the image's orientation (jpg/jpeg only!)
-```php
-$phpFileHandler->fix_image_orientation( string $filename [, string $filecontent = null ] )
+$phpFileHandler->convert_image( string $output_type [, bool $keepOriginal = false [, mixed $file_index = null ]] )
 ```
 
 - **_put_watermark()_**  
-> Puts an image as watermark on top of another image  
+> Puts an watermark on top of every image file in **$phpFileHandler->Files_ready**
 > *$opacity* The watermark's opacity can be set as float in a range of 0.00(_fully transparent_) to 1.00(_fully visible_)  
 > *$position* 'center'(_default_), 'top', 'left', 'right', 'bottom', 'top left', 'top right', 'bottom left', 'bottom right'
 ```php
-$phpFileHandler->put_watermark( string $target, string $watermark [, float $opacity = 0.5 [, string $position = 'center' [, int $offsetX = 0 [, int $offsetY = 0 ]]]] )
+$phpFileHandler->put_watermark( string $watermark [, float $opacity = 0.5 [, string $position = 'center' [, int $offsetX = 0 [, int $offsetY = 0 [, mixed $file_index = null ]]]]] )
 ```
 
 ### static utility functions
@@ -231,15 +235,6 @@ $phpFileHandler->put_watermark( string $target, string $watermark [, float $opac
 > *$length* Sets the string output length in characters
 ```php
 phpFileHandler::uniqString( int $length = 12 )
-```
-
-- **_move_file()_**  
-> Safely moves a file from one directory to another  
-> *$allow_dir_create* Set to true to allow creating a folder if needed  
-> *$allow_override* Set to true to allow file overwrite  
-> *$copy* Set to true to copy the file to the given location by respecting *$allow_dir_create* & *$allow_override*
-```php
-phpFileHandler::move_file( string $filename, string $to [, bool $allow_dir_create = false [, bool $copy = false [, bool $allow_override = false ]]] )
 ```
 
 - **_delete_folder()_**  
