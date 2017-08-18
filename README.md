@@ -174,14 +174,14 @@ $phpFileHandler->add_existing_files( mixed $filenames )
 $phpFileHandler->save( string $to [, bool $allow_dir_create = false [, bool $allow_override = false [, int $file_index = null ]]] )
 ```
 
-- **_move_files()_**  
+- **_move_file()_**  
 > Safely moves a file from one directory to another  
 > *$file_index* An array index from **$phpFileHandler->Files_ready**
 > *$allow_dir_create* Set to true to allow creating a folder if needed  
 > *$allow_override* Set to true to allow file overwrite  
 > *$copy* Set to true to copy the file to the given location by respecting *$allow_dir_create* & *$allow_override*
 ```php
-phpFileHandler::move_files( int $file_index, string $to [, bool $allow_dir_create = false [, bool $allow_override = false [, bool $copy = false ]]] )
+phpFileHandler::move_file( int $file_index, string $to [, bool $allow_dir_create = false [, bool $allow_override = false [, bool $copy = false ]]] )
 ```
 
 - **_remove_added_files()_**  
