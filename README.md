@@ -5,7 +5,7 @@ All in one PHP file handling class
 ## Class Features
 
 - Handles complete file upload, sanitizing & saving process  
-- Safe file handling, wherever the possibility exists to overwrite another file the default behaviour is not todo so  
+- Safe file handling, except for the image manipulation functions there is no risk to overwrite existing files  
 - Safe folder deletion & emptying  
 - Add files from web urls  
 - Include the most common image handling features like thumb creation, resizing etc.  
