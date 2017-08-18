@@ -7,18 +7,26 @@ All in one PHP file handling class
 - Handles complete file upload, sanitizing & saving process  
 - Safe file handling, wherever the possibility exists to overwrite another file the default behaviour is not todo so  
 - Safe folder deletion & emptying
+- Add files from web urls
 - Include the most common image handling features like thumb creation, resizing etc.
 - Automatically adjusts the image oritentation when adding image files
 
 ## Dependencies
 
-To use the image handling functions, 
+**PHP 5+**
+
+To use the **image handling** functions, 
 the PHP gd2 extension which PHP ships within its default package has to be loaded. 
 You can check if its loaded with:
 ```php
 $phpFileHandler->is_gd2_ext;
 ```
 
+To add files from **web urls**, the '_allow_url_fopen_' parameter in your *php.ini* has to be enabled
+You can check if its enabled with:
+```php
+$phpFileHandler->is_allow_url_fopen;
+```
 
 ## File sanity
 
