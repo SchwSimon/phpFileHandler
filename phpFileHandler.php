@@ -529,8 +529,14 @@
 			if ( !is_dir( $dir ) ) {
 				return false;
 			}
-			self::emtpy_folder( $dir );
-			return rmdir( $dir );
+			if ( self::emtpy_folder( $dir ) ) {
+				// sleep 1 second
+				// when a folder contains sub folders it will take the OS time to update internally
+				// without a sleep rmdir will throw a Warning that the folder could not be removed because its not empty
+				sleep( 1 );
+				return rmdir( $dir );
+			}
+			return false;
 		}
 		
 		/**
@@ -538,6 +544,7 @@
 		 * @param string $dir Folder path
 		 * @param boolean $keepSubFolders Whether or not to keep the sub folders
 		 * @param array | string An array containing file extensions to avoid deleting (for a single extension a string can be passed too)
+		  * * Note: When passing this argument PHP will warn you when it cant delete a non empty directory..
 		 * @return boolean True on success, False on failure
 		 */
 		public static function emtpy_folder( $dir, $keepSubFolders = false, $fileExceptions = null ) {
